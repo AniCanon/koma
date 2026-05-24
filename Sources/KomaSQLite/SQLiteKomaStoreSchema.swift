@@ -3,13 +3,60 @@ import Foundation
 import Koma
 
 extension SQLiteKomaStore {
-    func ensureSchema(tableName: String, primaryKey: String, columns: [KomaColumnMetadata]) throws {
+    func ensureSchema(for entities: [any KomaEntityRecord.Type]) throws {
+        guard canUseFreshSchemaCreation else {
+            for entity in entities {
+                try ensureSchema(
+                    tableName: entity.komaTableName,
+                    primaryKey: entity.komaPrimaryKey,
+                    columns: entity.komaColumns,
+                    generatedSQL: entity._komaSQLiteCreateTableSQL
+                )
+            }
+            return
+        }
+
+        var sql = ""
+        var tableNames: [String] = []
+        for entity in entities where !ensuredTables.contains(entity.komaTableName) {
+            if !sql.isEmpty {
+                sql.append("; ")
+            }
+            appendCreateTableSQL(
+                tableName: entity.komaTableName,
+                columns: entity.komaColumns,
+                generatedSQL: entity._komaSQLiteCreateTableSQL,
+                to: &sql
+            )
+            tableNames.append(entity.komaTableName)
+        }
+
+        guard !sql.isEmpty else {
+            return
+        }
+
+        try execute(sql)
+        ensuredTables.formUnion(tableNames)
+    }
+
+    func ensureSchema(
+        tableName: String,
+        primaryKey: String,
+        columns: [KomaColumnMetadata],
+        generatedSQL: String? = nil
+    ) throws {
         guard !ensuredTables.contains(tableName) else {
             return
         }
 
+        if canUseFreshSchemaCreation {
+            try createTable(tableName: tableName, columns: columns, generatedSQL: generatedSQL)
+            ensuredTables.insert(tableName)
+            return
+        }
+
         if try !tableExists(tableName) {
-            try createTable(tableName: tableName, columns: columns)
+            try createTable(tableName: tableName, columns: columns, generatedSQL: generatedSQL)
             ensuredTables.insert(tableName)
             return
         }
@@ -18,7 +65,27 @@ extension SQLiteKomaStore {
         ensuredTables.insert(tableName)
     }
 
-    func createTable(tableName: String, columns: [KomaColumnMetadata]) throws {
+    func createTable(tableName: String, columns: [KomaColumnMetadata], generatedSQL: String? = nil) throws {
+        var sql = ""
+        appendCreateTableSQL(tableName: tableName, columns: columns, generatedSQL: generatedSQL, to: &sql)
+        try execute(sql)
+    }
+
+    private func appendCreateTableSQL(
+        tableName: String,
+        columns: [KomaColumnMetadata],
+        generatedSQL: String?,
+        to sql: inout String
+    ) {
+        if let generatedSQL {
+            sql.append(generatedSQL)
+            return
+        }
+
+        sql.append("CREATE TABLE IF NOT EXISTS ")
+        Self.appendQuotedIdentifier(tableName, to: &sql)
+        sql.append(" (")
+
         var definitions = ""
         for column in columns {
             if !definitions.isEmpty {
@@ -31,8 +98,8 @@ extension SQLiteKomaStore {
                 definitions.append(" PRIMARY KEY NOT NULL")
             }
         }
-        let sql = "CREATE TABLE IF NOT EXISTS \(Self.quote(tableName)) (\(definitions))"
-        try execute(sql)
+        sql.append(definitions)
+        sql.append(")")
     }
 
     private func reconcileSchema(tableName: String, primaryKey: String, columns: [KomaColumnMetadata]) throws {

@@ -5,27 +5,28 @@ import Koma
 public actor SQLiteKomaStore: KomaStore {
     var connection: SQLiteConnection
     let path: String
-    let encoder: JSONEncoder
+    var encoder: JSONEncoder?
     let decoder: JSONDecoder?
     let usesSQLiteFastPath: Bool
+    var canUseFreshSchemaCreation: Bool
     var ensuredTables: Set<String> = []
     var activeTransactionID: UUID?
     var transactionWaiters: [CheckedContinuation<Void, Never>] = []
 
     public init(path: String) async throws {
-        try await self.init(path: path, schema: nil, encoder: JSONEncoder(), customDecoder: nil, usesSQLiteFastPath: true)
+        try await self.init(path: path, schema: nil, encoder: nil, customDecoder: nil, usesSQLiteFastPath: true)
     }
 
     public init(path: String, schema: KomaSchema) async throws {
-        try await self.init(path: path, schema: schema, encoder: JSONEncoder(), customDecoder: nil, usesSQLiteFastPath: true)
+        try await self.init(path: path, schema: schema, encoder: nil, customDecoder: nil, usesSQLiteFastPath: true)
     }
 
     public init(path: String, decoder: JSONDecoder) async throws {
-        try await self.init(path: path, schema: nil, encoder: JSONEncoder(), customDecoder: decoder, usesSQLiteFastPath: true)
+        try await self.init(path: path, schema: nil, encoder: nil, customDecoder: decoder, usesSQLiteFastPath: true)
     }
 
     public init(path: String, schema: KomaSchema, decoder: JSONDecoder) async throws {
-        try await self.init(path: path, schema: schema, encoder: JSONEncoder(), customDecoder: decoder, usesSQLiteFastPath: true)
+        try await self.init(path: path, schema: schema, encoder: nil, customDecoder: decoder, usesSQLiteFastPath: true)
     }
 
     public init(path: String, encoder: JSONEncoder, decoder: JSONDecoder = JSONDecoder()) async throws {
@@ -39,7 +40,7 @@ public actor SQLiteKomaStore: KomaStore {
     private init(
         path: String,
         schema: KomaSchema?,
-        encoder: JSONEncoder,
+        encoder: JSONEncoder?,
         customDecoder decoder: JSONDecoder?,
         usesSQLiteFastPath: Bool
     ) async throws {
@@ -47,8 +48,10 @@ public actor SQLiteKomaStore: KomaStore {
         self.encoder = encoder
         self.decoder = decoder
         self.usesSQLiteFastPath = usesSQLiteFastPath
+        canUseFreshSchemaCreation = Self.isKnownFreshDatabase(path)
 
-        let flags = SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX
+        // SQLite access is serialized by this actor, so per-connection SQLite mutexes are redundant here.
+        let flags = SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_NOMUTEX
         var connection: OpaquePointer?
         guard sqlite3_open_v2(path, &connection, flags, nil) == SQLITE_OK else {
             let message = connection.flatMap { sqlite3_errmsg($0) }.map { String(cString: $0) } ?? "Unable to open SQLite database."
@@ -63,13 +66,7 @@ public actor SQLiteKomaStore: KomaStore {
 
         if let schema {
             try applyMigrationPacks(schema.migrationPacks)
-            for entity in schema.entities {
-                try ensureSchema(
-                    tableName: entity.komaTableName,
-                    primaryKey: entity.komaPrimaryKey,
-                    columns: entity.komaColumns
-                )
-            }
+            try ensureSchema(for: schema.entities)
             try applyLatestSchemaArtifacts(schema.migrationPacks)
         }
     }
@@ -85,7 +82,24 @@ public actor SQLiteKomaStore: KomaStore {
         try ensureSchema(
             tableName: Record.komaTableName,
             primaryKey: Record.komaPrimaryKey,
-            columns: Record.komaColumns
+            columns: Record.komaColumns,
+            generatedSQL: Record._komaSQLiteCreateTableSQL
         )
+    }
+
+    private static func isKnownFreshDatabase(_ path: String) -> Bool {
+        guard path != ":memory:" else {
+            return true
+        }
+
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: path) else {
+            return true
+        }
+
+        guard let size = try? fileManager.attributesOfItem(atPath: path)[.size] as? NSNumber else {
+            return false
+        }
+        return size.int64Value == 0
     }
 }

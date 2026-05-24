@@ -30,6 +30,14 @@ extension SQLiteKomaStore {
     }
 
     func object(from record: some Encodable) throws -> [String: Any] {
+        let encoder: JSONEncoder
+        if let existingEncoder = self.encoder {
+            encoder = existingEncoder
+        } else {
+            encoder = JSONEncoder()
+            self.encoder = encoder
+        }
+
         let data = try encoder.encode(record)
         return try (JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
     }

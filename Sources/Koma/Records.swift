@@ -22,6 +22,7 @@ public protocol KomaEntityRecord: Codable, Sendable {
     static var komaPrimaryKey: String { get }
     static var komaColumns: [KomaColumnMetadata] { get }
     static var columns: Columns { get }
+    static var _komaSQLiteCreateTableSQL: String? { get }
     static var _komaSQLiteFastPath: Bool { get }
     var _komaSQLiteValues: [_KomaSQLiteValue] { get }
     static var _komaJSONFastPath: Bool { get }
@@ -35,6 +36,10 @@ public protocol KomaEntityRecord: Codable, Sendable {
 }
 
 public extension KomaEntityRecord {
+    static var _komaSQLiteCreateTableSQL: String? {
+        nil
+    }
+
     static var _komaSQLiteFastPath: Bool {
         false
     }

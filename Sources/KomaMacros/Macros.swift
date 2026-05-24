@@ -20,6 +20,7 @@ import Koma
     named(komaTableName),
     named(komaPrimaryKey),
     named(komaColumns),
+    named(_komaSQLiteCreateTableSQL),
     named(_komaSQLiteFastPath),
     named(_komaSQLiteValues),
     named(_komaSQLiteBind),

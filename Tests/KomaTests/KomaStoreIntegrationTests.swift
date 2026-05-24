@@ -33,6 +33,28 @@ private struct SQLiteFastPathProfileRecord: KomaEntityRecord, Equatable {
     }
 }
 
+@KomaEntity(table: "schema_reconcile_projects")
+private struct SchemaReconcileProjectRecord: KomaEntityRecord, Equatable {
+    @KomaPrimaryKey var id: String
+    var name: String
+
+    init(id: String, name: String) {
+        self.id = id
+        self.name = name
+    }
+}
+
+@KomaEntity(table: "schema_reconcile_projects")
+private struct IncompatibleSchemaReconcileProjectRecord: KomaEntityRecord, Equatable {
+    @KomaPrimaryKey var uuid: String
+    var name: String
+
+    init(uuid: String, name: String) {
+        self.uuid = uuid
+        self.name = name
+    }
+}
+
 struct KomaStoreIntegrationTests {
     @Test
     func `store filters and orders records`() async throws {
@@ -52,6 +74,7 @@ struct KomaStoreIntegrationTests {
         #expect(ProjectRecord.komaTableName == "projects")
         #expect(ProjectRecord.komaPrimaryKey == "id")
         #expect(ProjectRecord.komaColumns.map(\.name) == ["id", "name", "slug", "deletedAt"])
+        #expect(ProjectRecord._komaSQLiteCreateTableSQL?.contains("CREATE TABLE IF NOT EXISTS") == true)
         #expect(ProjectRecord._komaSQLiteFastPath)
     }
 
@@ -119,6 +142,22 @@ struct KomaStoreIntegrationTests {
 
         #expect(SQLiteFastPathProfileRecord._komaSQLiteFastPath)
         #expect(hydrated == records)
+    }
+
+    @Test
+    func `existing databases still reconcile schema defensively`() async throws {
+        let path = makeStorePath()
+        var originalStore: SQLiteKomaStore? = try await SQLiteKomaStore(path: path)
+        try await originalStore?.ensureSchema(for: SchemaReconcileProjectRecord.self)
+        originalStore = nil
+
+        let reopenedStore = try await SQLiteKomaStore(path: path)
+        do {
+            try await reopenedStore.ensureSchema(for: IncompatibleSchemaReconcileProjectRecord.self)
+            Issue.record("Expected Koma to reject an incompatible primary key on an existing table.")
+        } catch let SQLiteKomaError.incompatibleSchema(message) {
+            #expect(message.contains("primary key"))
+        }
     }
 
     @Test

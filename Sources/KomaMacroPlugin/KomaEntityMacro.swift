@@ -29,6 +29,8 @@ public struct KomaEntityMacro: MemberMacro {
                 "KomaColumnMetadata(name: \"\($0.name)\", storage: .\($0.storage), isPrimaryKey: \($0.name == primaryKey ? "true" : "false"))"
             }
             .joined(separator: ",\n        ")
+        let createTableSQL = Self.createTableSQL(tableName: tableName, properties: properties, primaryKey: primaryKey)
+        let createTableLiteral = String(reflecting: createTableSQL)
 
         var declarations: [DeclSyntax] = [
             """
@@ -50,6 +52,9 @@ public struct KomaEntityMacro: MemberMacro {
             public static let komaColumns: [KomaColumnMetadata] = [
                 \(raw: metadata)
             ]
+            """,
+            """
+            public static let _komaSQLiteCreateTableSQL: String? = \(raw: createTableLiteral)
             """
         ]
 
@@ -131,6 +136,35 @@ public struct KomaEntityMacro: MemberMacro {
                 }
                 result.append(String(character).lowercased())
             }
+    }
+
+    private static func createTableSQL(tableName: String, properties: [EntityProperty], primaryKey: String) -> String {
+        let columns = properties.map { property in
+            var column = "\(Self.quotedIdentifier(property.name)) \(Self.sqliteType(for: property.storage))"
+            if property.name == primaryKey {
+                column += " PRIMARY KEY NOT NULL"
+            }
+            return column
+        }
+        .joined(separator: ", ")
+        return "CREATE TABLE IF NOT EXISTS \(Self.quotedIdentifier(tableName)) (\(columns))"
+    }
+
+    private static func sqliteType(for storage: String) -> String {
+        switch storage {
+        case "integer":
+            return "INTEGER"
+        case "real":
+            return "REAL"
+        case "blob":
+            return "BLOB"
+        default:
+            return "TEXT"
+        }
+    }
+
+    private static func quotedIdentifier(_ identifier: String) -> String {
+        "\"\(identifier.replacingOccurrences(of: "\"", with: "\"\""))\""
     }
 
     private static func properties(from structDecl: StructDeclSyntax) -> [EntityProperty] {
