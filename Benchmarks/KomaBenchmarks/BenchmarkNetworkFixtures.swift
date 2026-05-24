@@ -1,4 +1,5 @@
 import Foundation
+import KomaBenchmarkSupport
 
 enum BenchmarkNetworkFixtures {
     static let baseURL = URL(string: "https://benchmark.invalid")!

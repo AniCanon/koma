@@ -1,4 +1,5 @@
 import Koma
+import KomaBenchmarkSupport
 
 enum BenchmarkProjectResources: KomaResourceNamespace {
     struct Client {

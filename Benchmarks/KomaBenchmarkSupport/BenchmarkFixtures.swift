@@ -1,7 +1,7 @@
 import Foundation
 
-enum BenchmarkFixtures {
-    static func projects(_ count: Int) -> [BenchmarkProject] {
+public enum BenchmarkFixtures {
+    public static func projects(_ count: Int) -> [BenchmarkProject] {
         (0 ..< count).map { index in
             BenchmarkProject(
                 id: "project-\(index)",
@@ -15,11 +15,11 @@ enum BenchmarkFixtures {
         }
     }
 
-    static func responseBody(projects: [BenchmarkProject]) -> Data {
+    public static func responseBody(projects: [BenchmarkProject]) -> Data {
         try! JSONEncoder().encode(projects)
     }
 
-    static func characters(for projects: [BenchmarkProject]) -> [BenchmarkCharacter] {
+    public static func characters(for projects: [BenchmarkProject]) -> [BenchmarkCharacter] {
         projects.enumerated().flatMap { index, project -> [BenchmarkCharacter] in
             guard !index.isMultiple(of: 7) else {
                 return []
@@ -41,7 +41,7 @@ enum BenchmarkFixtures {
         }
     }
 
-    static func graphQLResponseBody(projects: [BenchmarkProject]) -> Data {
+    public static func graphQLResponseBody(projects: [BenchmarkProject]) -> Data {
         let projectObjects = projects.map { project -> [String: Any] in
             [
                 "__typename": "Project",
@@ -62,7 +62,7 @@ enum BenchmarkFixtures {
         return try! JSONSerialization.data(withJSONObject: response)
     }
 
-    static func databasePath(_ label: String) -> String {
+    public static func databasePath(_ label: String) -> String {
         let directory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
         return directory
             .appendingPathComponent("koma-\(label)-\(UUID().uuidString)")
@@ -70,7 +70,7 @@ enum BenchmarkFixtures {
             .path
     }
 
-    static func removeDatabaseFiles(_ path: String) {
+    public static func removeDatabaseFiles(_ path: String) {
         let fileManager = FileManager.default
         try? fileManager.removeItem(atPath: path)
         try? fileManager.removeItem(atPath: "\(path)-shm")

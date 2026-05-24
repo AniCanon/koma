@@ -13,6 +13,14 @@ The bundled SQLite target keeps SQLite behavior predictable across iOS and Andro
 
 When integrating into an app, expose app-specific clients over the Android bridge rather than exposing Koma types directly. This keeps platform UI code insulated from storage details.
 
+Benchmark Android runtime behavior with:
+
+```sh
+scripts/benchmark-android.sh .benchmark-results/android-device
+```
+
+This runs the Android-specific benchmark target against Koma, raw SQLite, GRDB, and SQLite.swift where the Android Swift SDK and device support those peers.
+
 Background refresh should be scheduled by the host app:
 
 - iOS: `BGTaskScheduler`

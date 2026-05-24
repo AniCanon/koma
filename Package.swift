@@ -13,14 +13,41 @@ let dependencies: [Package.Dependency] = [
     .package(url: "https://github.com/Moya/Moya.git", exact: "15.0.3"),
     .package(url: "https://github.com/apollographql/apollo-ios.git", exact: "2.1.2"),
     .package(url: "https://github.com/groue/GRDB.swift.git", exact: "7.10.0"),
+    .package(
+        url: "https://github.com/stephencelis/SQLite.swift.git",
+        exact: "0.16.0",
+        traits: [.trait(name: "SQLiteSwiftCSQLite")]
+    ),
     .package(url: "https://github.com/ordo-one/benchmark", exact: "1.33.0")
 ] : [])
 
 let benchmarkTargets: [Target] = enableBenchmarks ? [
+    .target(
+        name: "KomaBenchmarkSupport",
+        dependencies: [
+            "Koma",
+            "KomaMacros"
+        ],
+        path: "Benchmarks/KomaBenchmarkSupport"
+    ),
+    .target(
+        name: "KomaBenchmarkSQLiteSupport",
+        dependencies: [
+            "CKomaSQLite",
+            "KomaBenchmarkSupport"
+        ],
+        path: "Benchmarks/KomaBenchmarkSQLiteSupport"
+    ),
+    .target(
+        name: "KomaAndroidBenchmarkCore",
+        path: "Benchmarks/KomaAndroidBenchmarkCore"
+    ),
     .executableTarget(
         name: "KomaBenchmarks",
         dependencies: [
             "Koma",
+            "KomaBenchmarkSupport",
+            "KomaBenchmarkSQLiteSupport",
             "KomaHTTP",
             "KomaMacros",
             "KomaSQLite",
@@ -36,6 +63,27 @@ let benchmarkTargets: [Target] = enableBenchmarks ? [
         plugins: [
             .plugin(name: "BenchmarkPlugin", package: "benchmark")
         ]
+    ),
+    .executableTarget(
+        name: "KomaAndroidBenchmarks",
+        dependencies: [
+            "Koma",
+            "KomaAndroidBenchmarkCore",
+            "KomaBenchmarkSupport",
+            "KomaBenchmarkSQLiteSupport",
+            "KomaSQLite",
+            .product(name: "GRDB", package: "GRDB.swift")
+        ],
+        path: "Benchmarks/KomaAndroidBenchmarks"
+    ),
+    .executableTarget(
+        name: "KomaAndroidSQLiteSwiftBenchmarks",
+        dependencies: [
+            "KomaAndroidBenchmarkCore",
+            "KomaBenchmarkSupport",
+            .product(name: "SQLite", package: "SQLite.swift")
+        ],
+        path: "Benchmarks/KomaAndroidSQLiteSwiftBenchmarks"
     )
 ] : []
 
@@ -61,7 +109,8 @@ let package = Package(
                 .define("SQLITE_THREADSAFE", to: "1"),
                 .define("SQLITE_OMIT_LOAD_EXTENSION"),
                 .define("SQLITE_ENABLE_JSON1"),
-                .define("SQLITE_ENABLE_FTS5")
+                .define("SQLITE_ENABLE_FTS5"),
+                .define("SQLITE_ENABLE_SNAPSHOT")
             ]
         ),
         .target(

@@ -52,7 +52,23 @@ The official script writes:
 
 The scripts default `BENCHMARK_DISABLE_JEMALLOC=true` so contributors do not need a system `jemalloc` install. Set `BENCHMARK_DISABLE_JEMALLOC=false` and install `jemalloc` when you want allocator-specific metrics on a host machine.
 
-The benchmark target is opt-in through `KOMA_ENABLE_BENCHMARKS=1`, which the scripts set for you. This keeps ordinary `swift test` runs focused on library/test targets and prevents app consumers from resolving benchmark-only dependencies such as Alamofire, Moya, Apollo, GRDB, and `swift-benchmark`.
+The benchmark targets are opt-in through `KOMA_ENABLE_BENCHMARKS=1`, which the scripts set for you. This keeps ordinary `swift test` runs focused on library/test targets and prevents app consumers from resolving benchmark-only dependencies such as Alamofire, Moya, Apollo, GRDB, SQLite.swift, and `swift-benchmark`.
+
+## Running On Android
+
+Android benchmarks use a separate target and peer set:
+
+```sh
+scripts/benchmark-android.sh .benchmark-results/android-pixel
+```
+
+Use build-only mode when no device is connected:
+
+```sh
+scripts/benchmark-android.sh .benchmark-results/android-build-only --build-only
+```
+
+See `docs/benchmarks/android.md` for device setup, peer selection, and publishing rules.
 
 ## Publishing Official Results
 

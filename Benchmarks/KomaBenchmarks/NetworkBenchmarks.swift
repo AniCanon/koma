@@ -3,14 +3,20 @@ import Apollo
 import Benchmark
 import Foundation
 import Koma
+import KomaBenchmarkSupport
 import KomaHTTP
 import KomaSQLite
 import Moya
 
 func registerNetworkBenchmarks() {
-    let restURL = BenchmarkNetworkFixtures.payload1k.url
-    let graphQLURL = BenchmarkNetworkFixtures.baseURL.appendingPathComponent("graphql")
+    registerJSONDecodeBenchmarks()
+    registerURLSessionBenchmarks()
+    registerKomaTransportBenchmarks()
+    registerKomaResourceNetworkBenchmark()
+    registerProviderBenchmarks()
+}
 
+private func registerJSONDecodeBenchmarks() {
     for payload in BenchmarkNetworkFixtures.payloads {
         Benchmark("network.foundation.jsondecoder.decode.\(payload.label)") { benchmark in
             let decoder = JSONDecoder()
@@ -30,7 +36,11 @@ func registerNetworkBenchmarks() {
                 blackHole(records.count)
             }
         }
+    }
+}
 
+private func registerURLSessionBenchmarks() {
+    for payload in BenchmarkNetworkFixtures.payloads {
         Benchmark("network.urlsession.get.data.\(payload.label)") { benchmark in
             let session = BenchmarkNetworkFixtures.urlSession()
             let url = payload.url
@@ -52,14 +62,13 @@ func registerNetworkBenchmarks() {
                 blackHole(projects.count)
             }
         }
+    }
+}
 
+private func registerKomaTransportBenchmarks() {
+    for payload in BenchmarkNetworkFixtures.payloads {
         Benchmark("network.koma.transport.get.jsonrecord.\(payload.label)") { benchmark in
-            let session = BenchmarkNetworkFixtures.urlSession()
-            let koma = KomaClient(
-                baseURL: BenchmarkNetworkFixtures.baseURL,
-                store: BenchmarkNoopStore(),
-                session: session
-            )
+            let koma = networkOnlyKomaClient()
             let request = KomaRequest(method: .get, path: payload.path)
 
             for _ in benchmark.scaledIterations {
@@ -74,13 +83,14 @@ func registerNetworkBenchmarks() {
         }
     }
 
+    registerKomaDecoderTransportBenchmark()
+    registerKomaHeaderTransportBenchmark()
+    registerKomaDataTransportBenchmark()
+}
+
+private func registerKomaDecoderTransportBenchmark() {
     Benchmark("network.koma.transport.get.decode.1k") { benchmark in
-        let session = BenchmarkNetworkFixtures.urlSession()
-        let koma = KomaClient(
-            baseURL: BenchmarkNetworkFixtures.baseURL,
-            store: BenchmarkNoopStore(),
-            session: session
-        )
+        let koma = networkOnlyKomaClient()
         let decoder = JSONDecoder()
         let request = KomaRequest(method: .get, path: "projects")
 
@@ -94,14 +104,11 @@ func registerNetworkBenchmarks() {
             blackHole(projects.count)
         }
     }
+}
 
+private func registerKomaHeaderTransportBenchmark() {
     Benchmark("network.koma.transport.get.decode.headers.1k") { benchmark in
-        let session = BenchmarkNetworkFixtures.urlSession()
-        let koma = KomaClient(
-            baseURL: BenchmarkNetworkFixtures.baseURL,
-            store: BenchmarkNoopStore(),
-            session: session
-        )
+        let koma = networkOnlyKomaClient()
         let decoder = JSONDecoder()
         let request = KomaRequest(method: .get, path: "projects")
 
@@ -111,14 +118,11 @@ func registerNetworkBenchmarks() {
             blackHole(projects.count)
         }
     }
+}
 
+private func registerKomaDataTransportBenchmark() {
     Benchmark("network.koma.transport.get.data.1k") { benchmark in
-        let session = BenchmarkNetworkFixtures.urlSession()
-        let koma = KomaClient(
-            baseURL: BenchmarkNetworkFixtures.baseURL,
-            store: BenchmarkNoopStore(),
-            session: session
-        )
+        let koma = networkOnlyKomaClient()
         let request = KomaRequest(method: .get, path: "projects")
 
         for _ in benchmark.scaledIterations {
@@ -130,17 +134,18 @@ func registerNetworkBenchmarks() {
             blackHole(response.body.count)
         }
     }
+}
 
+private func registerKomaResourceNetworkBenchmark() {
     Benchmark("network.koma.resource.urlsession.networkFirstFallback.1k") { benchmark in
         let path = BenchmarkFixtures.databasePath("koma-network-resource")
         defer { BenchmarkFixtures.removeDatabaseFiles(path) }
 
         let store = try await SQLiteKomaStore(path: path)
-        let session = BenchmarkNetworkFixtures.urlSession()
         let koma = KomaClient(
             baseURL: BenchmarkNetworkFixtures.baseURL,
             store: store,
-            session: session
+            session: BenchmarkNetworkFixtures.urlSession()
         )
 
         for _ in benchmark.scaledIterations {
@@ -153,9 +158,18 @@ func registerNetworkBenchmarks() {
             blackHole(snapshot.value.count)
         }
     }
+}
 
+private func registerProviderBenchmarks() {
+    registerAlamofireBenchmark()
+    registerMoyaBenchmark()
+    registerApolloBenchmark()
+}
+
+private func registerAlamofireBenchmark() {
     Benchmark("network.alamofire.get.decode.1k") { benchmark in
         let session = Alamofire.Session(configuration: BenchmarkNetworkFixtures.urlSessionConfiguration())
+        let restURL = BenchmarkNetworkFixtures.payload1k.url
 
         for _ in benchmark.scaledIterations {
             let projects = try await session
@@ -165,7 +179,9 @@ func registerNetworkBenchmarks() {
             blackHole(projects.count)
         }
     }
+}
 
+private func registerMoyaBenchmark() {
     Benchmark("network.moya.get.decode.1k") { benchmark in
         let session = Alamofire.Session(configuration: BenchmarkNetworkFixtures.urlSessionConfiguration())
         let provider = MoyaProvider<BenchmarkMoyaTarget>(
@@ -180,7 +196,9 @@ func registerNetworkBenchmarks() {
             blackHole(projects.count)
         }
     }
+}
 
+private func registerApolloBenchmark() {
     Benchmark("network.apollo.query.networkOnly.1k") { benchmark in
         let session = BenchmarkNetworkFixtures.urlSession()
         let store = ApolloStore(cache: InMemoryNormalizedCache())
@@ -188,7 +206,7 @@ func registerNetworkBenchmarks() {
             urlSession: session,
             interceptorProvider: DefaultInterceptorProvider.shared,
             store: store,
-            endpointURL: graphQLURL
+            endpointURL: BenchmarkNetworkFixtures.baseURL.appendingPathComponent("graphql")
         )
         let client = ApolloClient(
             networkTransport: transport,
@@ -204,4 +222,12 @@ func registerNetworkBenchmarks() {
             blackHole(response.data?.projects.count ?? 0)
         }
     }
+}
+
+private func networkOnlyKomaClient() -> KomaClient {
+    KomaClient(
+        baseURL: BenchmarkNetworkFixtures.baseURL,
+        store: BenchmarkNoopStore(),
+        session: BenchmarkNetworkFixtures.urlSession()
+    )
 }

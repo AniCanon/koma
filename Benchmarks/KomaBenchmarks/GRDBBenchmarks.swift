@@ -1,6 +1,7 @@
 import Benchmark
 import Foundation
 import GRDB
+import KomaBenchmarkSupport
 
 func registerGRDBBenchmarks(small: [BenchmarkProject], large: [BenchmarkProject]) {
     Benchmark("grdb.sqlite.open.ensureSchema") { benchmark in

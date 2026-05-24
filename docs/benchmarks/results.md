@@ -14,6 +14,18 @@ Then attach the run directory to the GitHub release and add a row below.
 | --- | --- | --- | --- | --- |
 | Pending | Pending first release run | Pending | Pending | Establish baseline before quoting numbers in README. |
 
+## Android Results
+
+No Android device result has been published yet.
+
+The first Android run should be created with:
+
+```sh
+scripts/benchmark-android.sh .benchmark-results/koma-android-<version>-<device>
+```
+
+Android results must stay separate from host macOS results. Quote physical-device runs for releases; keep emulator runs for smoke checks and regressions.
+
 ## Join API Local Baseline
 
 These numbers were captured from the join API working tree and should be treated as development data, not release claims. This run covers the closure-based `join`, `leftJoin`, and `rightJoin` APIs against equivalent raw SQLite queries.

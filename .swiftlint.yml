@@ -1,4 +1,5 @@
 included:
+  - Benchmarks
   - Examples
   - Sources
   - Tests

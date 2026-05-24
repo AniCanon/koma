@@ -2,6 +2,7 @@
 import Benchmark
 import CoreData
 import Foundation
+import KomaBenchmarkSupport
 
 func registerCoreDataBenchmarks(small: [BenchmarkProject], large: [BenchmarkProject]) {
     Benchmark("coredata.sqlite.open.ensureSchema") { benchmark in

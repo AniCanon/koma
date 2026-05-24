@@ -1,6 +1,8 @@
 import Benchmark
 import Foundation
 import Koma
+import KomaBenchmarkSQLiteSupport
+import KomaBenchmarkSupport
 import KomaSQLite
 import KomaTesting
 

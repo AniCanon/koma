@@ -1,12 +1,11 @@
+import CKomaSQLite
 import Foundation
-#if canImport(SQLite3)
-import SQLite3
-#endif
+import KomaBenchmarkSupport
 
-final class RawSQLiteBenchmarkDatabase {
+public final class RawSQLiteBenchmarkDatabase {
     private var connection: OpaquePointer?
 
-    init(path: String) throws {
+    public init(path: String) throws {
         guard sqlite3_open_v2(path, &connection, SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK
         else {
             throw RawSQLiteBenchmarkError.openFailed(errorMessage)
@@ -45,7 +44,7 @@ final class RawSQLiteBenchmarkDatabase {
         }
     }
 
-    func upsert(_ projects: [BenchmarkProject]) throws {
+    public func upsert(_ projects: [BenchmarkProject]) throws {
         let sql = """
         INSERT INTO benchmark_projects (id, name, slug, deletedAt, score, updatedAt, summary)
         VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -90,7 +89,7 @@ final class RawSQLiteBenchmarkDatabase {
         }
     }
 
-    func upsertCharacters(_ characters: [BenchmarkCharacter]) throws {
+    public func upsertCharacters(_ characters: [BenchmarkCharacter]) throws {
         let sql = """
         INSERT INTO benchmark_characters (id, projectId, name, role)
         VALUES (?, ?, ?, ?)
@@ -125,7 +124,7 @@ final class RawSQLiteBenchmarkDatabase {
         }
     }
 
-    func fetchActiveProjects(limit: Int) throws -> [BenchmarkProject] {
+    public func fetchActiveProjects(limit: Int) throws -> [BenchmarkProject] {
         let statement = try prepare(
             """
             SELECT id, name, slug, deletedAt, score, updatedAt, summary
@@ -163,7 +162,7 @@ final class RawSQLiteBenchmarkDatabase {
         return projects
     }
 
-    func fetchProjectsWithLeadCharacters(limit: Int) throws -> [BenchmarkProject] {
+    public func fetchProjectsWithLeadCharacters(limit: Int) throws -> [BenchmarkProject] {
         try fetchProjects(
             sql: """
             SELECT DISTINCT p.id, p.name, p.slug, p.deletedAt, p.score, p.updatedAt, p.summary
@@ -177,7 +176,7 @@ final class RawSQLiteBenchmarkDatabase {
         )
     }
 
-    func fetchProjectsWithoutCharacters(limit: Int) throws -> [BenchmarkProject] {
+    public func fetchProjectsWithoutCharacters(limit: Int) throws -> [BenchmarkProject] {
         try fetchProjects(
             sql: """
             SELECT DISTINCT p.id, p.name, p.slug, p.deletedAt, p.score, p.updatedAt, p.summary
@@ -191,7 +190,7 @@ final class RawSQLiteBenchmarkDatabase {
         )
     }
 
-    func fetchProjectsRightJoinedToLeadCharacters(limit: Int) throws -> [BenchmarkProject] {
+    public func fetchProjectsRightJoinedToLeadCharacters(limit: Int) throws -> [BenchmarkProject] {
         try fetchProjects(
             sql: """
             SELECT DISTINCT p.id, p.name, p.slug, p.deletedAt, p.score, p.updatedAt, p.summary

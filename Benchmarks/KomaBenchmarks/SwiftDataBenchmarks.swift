@@ -1,6 +1,7 @@
 #if canImport(SwiftData)
 import Benchmark
 import Foundation
+import KomaBenchmarkSupport
 import SwiftData
 
 @available(macOS 14, iOS 17, tvOS 17, watchOS 10, *)

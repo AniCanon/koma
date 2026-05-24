@@ -1,4 +1,5 @@
 import Foundation
+import KomaBenchmarkSupport
 
 func registerComparisonBenchmarks(small: [BenchmarkProject], large: [BenchmarkProject]) {
     registerGRDBBenchmarks(small: small, large: large)
