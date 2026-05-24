@@ -83,7 +83,7 @@ let koma = try await KomaClient.sqlite(
         ProjectSchema.self,
         CharacterSchema.self
     ]),
-    baseURL: URL(string: "https://api.anicanon.app/v1")!,
+    baseURL: URL(string: "https://api.example.com/v1")!,
     plugins: [
         KomaBearerAuthPlugin { try await tokenProvider.token() },
         KomaRetryPlugin(maxAttempts: 2)
