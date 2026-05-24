@@ -1,0 +1,33 @@
+name: Benchmarks
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/benchmarks.yml"
+      - "Benchmarks/**"
+      - "Package.swift"
+      - "Sources/**"
+      - "scripts/benchmark*.sh"
+
+jobs:
+  host:
+    name: Host Benchmarks
+    runs-on: macos-15
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Swift Version
+        run: swift --version
+
+      - name: Run Benchmarks
+        run: scripts/benchmark-official.sh .benchmark-results/host-macos --filter '.*(koma|rawsqlite|grdb|coredata|swiftdata).*'
+
+      - name: Upload Benchmark Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: koma-host-benchmarks
+          path: .benchmark-results/host-macos

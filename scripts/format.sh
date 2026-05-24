@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+
+if ! command -v swiftformat >/dev/null 2>&1; then
+  echo "error: swiftformat is not installed. Install it with: brew install swiftformat" >&2
+  exit 127
+fi
+
+swiftformat .

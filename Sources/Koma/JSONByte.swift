@@ -1,0 +1,22 @@
+enum JSONByte: UInt8 {
+    case backslash = 92
+    case b = 98
+    case capitalE = 69
+    case colon = 58
+    case comma = 44
+    case e = 101
+    case f = 102
+    case leftBrace = 123
+    case leftBracket = 91
+    case minus = 45
+    case n = 110
+    case period = 46
+    case plus = 43
+    case quote = 34
+    case r = 114
+    case rightBrace = 125
+    case rightBracket = 93
+    case slash = 47
+    case t = 116
+    case u = 117
+}

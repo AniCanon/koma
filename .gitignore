@@ -1,0 +1,11 @@
+.DS_Store
+.build/
+.build-bench-*/
+.swiftpm/
+.benchmark-results/
+Package.resolved
+DerivedData/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcuserstate
+*.swp

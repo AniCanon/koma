@@ -1,0 +1,289 @@
+# Koma
+
+Koma is a Swift 6.3 offline storage and refresh engine created by AniCanon for iOS and Android Swift. It provides typed SQLite persistence, lazy local queries, REST-backed refresh, auth plugins, retry plugins, and macro-expanded enum resource clients.
+
+Koma stores normalized records, not opaque REST payload blobs. The first goal is offline read-first data access; outbox writes, cursor sync, conflict resolution, and backend-specific sync protocols are intentionally deferred.
+
+You can use Koma in storage-only mode as a typed SQLite ORM. The network/resource layer is optional and additive.
+
+## Why Koma
+
+AniCanon needed reliable offline data without forcing every backend endpoint to become a full sync contract. Whole-database sync, conflict resolution, cursor ownership, and secure background auth are product-specific problems; pretending they are generic too early makes both client and backend architecture harder to maintain.
+
+Koma takes a smaller, practical stance: model the REST requests the app already makes, persist their typed records locally, and let the app keep important parameterized requests fresh. It gives repositories a stable local-first data layer while leaving true sync protocols to the moment the backend contract is ready.
+
+Architecturally, Koma is not Active Record. Records are value types that describe storage shape and mapping. They do not save themselves, fetch relationships by hidden globals, or own network calls. Persistence lives behind `KomaStore`, request refresh lives behind generated resource clients, and app features should still depend on repository or service protocols.
+
+## Packages
+
+- `Koma`: runtime core, query API, resources, plugins, snapshots, and store protocols.
+- `KomaMacros`: public macro declarations for entities and resources.
+- `KomaSQLite`: SQLite-backed `KomaStore` using the bundled SQLite amalgamation.
+- `KomaHTTP`: `URLSession` transport for REST APIs.
+- `KomaTesting`: test utilities such as fake transports.
+
+## Documentation
+
+The human-readable handbook lives in [docs/README.md](docs/README.md). It covers philosophy, architecture, examples, guides, and benchmark methodology as plain Markdown.
+
+DocC is reserved for Swift API reference. Its source catalog lives at `docs/Koma.docc`, and rendered output is generated under `.build` by `scripts/docs.sh`.
+
+## Examples
+
+Buildable examples live in `Examples/`:
+
+- `Examples/ProjectBrowser`: end-to-end repository sample with entities, relationships, REST resources, parameterized refresh registration, dependency injection, and tests.
+
+Run all examples with:
+
+```sh
+scripts/examples.sh
+```
+
+## Storage-Only ORM
+
+```swift
+@KomaEntity(table: "projects")
+struct ProjectRecord: KomaEntityRecord {
+    @KomaPrimaryKey var id: String
+    var name: String
+    var deletedAt: Date?
+}
+
+let store = try await SQLiteKomaStore(path: databaseURL.path)
+
+let projects = try await store.query(ProjectRecord.self)
+    .where { $0.deletedAt == nil }
+    .order(by: \.name)
+    .fetch()
+```
+
+For this mode, depend on `Koma`, `KomaMacros`, and `KomaSQLite`. Add `KomaHTTP` only when you want REST-backed refresh. See [Storage-Only Mode](docs/guides/storage-only.md).
+
+## Resource API
+
+```swift
+import Koma
+import KomaMacros
+
+@KomaResource(basePath: "projects", record: ProjectRecord.self)
+enum ProjectResources {
+    @KomaRoute(
+        .get(as: [Project].self),
+        cache: .collection("projects", staleAfter: .minutes(5))
+    )
+    case list(ProjectListParams = .init())
+
+    @KomaRoute(.get("{projectId}", as: Project.self), cache: .entity("projects"))
+    case detail(projectId: String)
+}
+```
+
+The macro generates a nested `Client`:
+
+```swift
+let projects = ProjectResources.client(in: koma)
+
+let snapshot = try await projects.list()
+    .where { $0.deletedAt == nil }
+    .order(by: \.name)
+    .fetch(policy: .networkFirstFallback)
+```
+
+`koma.resource(ProjectResources.self)` is also supported.
+
+For scoped code where passing `koma` everywhere adds noise, use the task-local context:
+
+```swift
+try await KomaContext.withClient(koma) {
+    let snapshot = try await ProjectResources.client()
+        .list()
+        .where { $0.deletedAt == nil }
+        .fetch(policy: .networkFirstFallback)
+}
+```
+
+Use this as a scoped override for tests, previews, jobs, or request handlers. Prefer explicit constructor injection at app boundaries.
+
+## Model Queries and Relationships
+
+```swift
+let projects = try await koma.query(ProjectModel.self)
+    .where { $0.deletedAt == nil }
+    .include(\.characters)
+    .fetch()
+
+let characters = try await projects[0].characters.fetch()
+let profile = try await projects[0].profile()
+let active = try await projects[0].characters.where { $0.deletedAt == nil }.fetch()
+```
+
+Relationship properties are lazy relation handles. Use `.fetch()` to execute, or `project.characters()` as shorthand for an unfiltered relation fetch.
+
+Queries also support joins when you want to filter the base result by a related table:
+
+```swift
+let projects = try await koma.query(ProjectModel.self)
+    .join(CharacterRecord.self) { $0.id == $1.projectId }
+    .where(CharacterRecord.self) { $0.name.hasPrefix("A") }
+    .fetch()
+```
+
+Outer joins use named methods:
+
+```swift
+let projectsWithoutCharacters = try await koma.query(ProjectModel.self)
+    .leftJoin(CharacterRecord.self) { $0.id == $1.projectId }
+    .where(CharacterRecord.self) { $0.id.isNull() }
+    .fetch()
+```
+
+## Scheduled Refresh
+
+```swift
+@KomaRoute(
+    .get("{projectId}", as: Project.self),
+    cache: .entity("projects", staleAfter: .minutes(15)),
+    refresh: .allowed
+)
+case detail(projectId: String)
+
+let snapshot = try await ProjectResources.client(in: koma)
+    .detail(projectId: "123")
+    .keepFresh(.whileRecentlyViewed(days: 7, staleAfter: .minutes(15), userScope: user.id))
+    .fetch(policy: .networkFirstFallback)
+```
+
+Koma stores refresh intent for the concrete request, not bearer tokens or raw payloads. Platform schedulers can later re-register refresh handlers and call `try await koma.refreshDueRegistrations()`.
+
+## Entity API
+
+```swift
+import Koma
+import KomaMacros
+
+@KomaEntity(table: "projects", as: Project.self)
+struct ProjectRecord: KomaRemoteRecord {
+    @KomaPrimaryKey var id: String
+    var name: String
+    var slug: String
+    var deletedAt: Date?
+}
+```
+
+Stored properties become columns by default. Computed read-only properties are ignored. Add `@KomaIgnore` to explicitly exclude a stored property. If the transport model has matching property names, `as:` generates the default mapping; write `init(remote:)` and `remoteValue` only for custom shapes.
+
+## Migrations
+
+Koma handles additive schema changes automatically when a new stored property becomes a column. For structural changes, split migrations into small packs near the feature that owns the records:
+
+```swift
+enum ProjectMigrations: KomaMigrationPack {
+    static let namespace = "projects"
+
+    static let migrations = [
+        Migration(1, 2) {
+            RenameColumn(ProjectRecord.self, from: "title", to: \.name)
+            AddIndex(ProjectRecord.self, \.slug, unique: true)
+        },
+    ]
+}
+
+let schema = KomaSchema(
+    entities: [ProjectRecord.self],
+    migrationPacks: [ProjectMigrations.self]
+)
+
+let store = try await SQLiteKomaStore(path: databaseURL.path, schema: schema)
+```
+
+Fresh installs create the latest schema directly. Existing databases with user tables and no Koma migration metadata start at the first migration version for each pack.
+
+## Initialization
+
+```swift
+import Koma
+import KomaHTTP
+import KomaSQLite
+
+let store = try await SQLiteKomaStore(path: databaseURL.path, schema: schema)
+
+let koma = KomaClient(
+    baseURL: apiBaseURL,
+    store: store,
+    transport: URLSessionKomaTransport(),
+    plugins: [
+        KomaBearerAuthPlugin { try await tokenProvider.token() },
+        KomaRetryPlugin(maxAttempts: 3)
+    ]
+)
+```
+
+`KomaClient` is the runtime container: create it once at the app composition root, then inject it into repositories, use cases, or dependency values. This keeps Koma testable like Point-Free style clients and avoids Firebase-style hidden global state by default.
+
+For a SwiftUI app, hold the configured client in app state or a dependency container. For TCA, register the feature clients that depend on Koma in `DependencyValues`; the public features should depend on app clients, not directly on Koma.
+
+Read policies:
+
+- `.localOnly`: read SQLite only.
+- `.networkFirstFallback`: refresh from REST, persist normalized records, then read local; if the network fails, return cached local data when available.
+- `.localThenRefresh`: available through `observe`; emits cached data first and then refreshed data.
+
+## SwiftPM
+
+```swift
+.package(url: "https://github.com/AniCanon/koma.git", from: "0.1.0")
+```
+
+Storage-only:
+
+```swift
+.product(name: "Koma", package: "koma"),
+.product(name: "KomaMacros", package: "koma"),
+.product(name: "KomaSQLite", package: "koma")
+```
+
+Storage plus REST refresh:
+
+```swift
+.product(name: "Koma", package: "koma"),
+.product(name: "KomaMacros", package: "koma"),
+.product(name: "KomaSQLite", package: "koma"),
+.product(name: "KomaHTTP", package: "koma")
+```
+
+The macro plugin is host-built. Runtime targets are designed to compile for Android Swift as well as Apple platforms.
+
+## Development
+
+```sh
+swift test
+scripts/lint.sh
+scripts/format.sh
+scripts/examples.sh
+scripts/docs.sh
+scripts/docs-preview.sh
+```
+
+Install the lint tools with:
+
+```sh
+brew install swiftformat swiftlint
+```
+
+## Benchmarks
+
+Koma includes a benchmark suite for storage and resource-pipeline performance:
+
+```sh
+scripts/benchmark.sh
+scripts/benchmark-official.sh .benchmark-results/local-koma
+```
+
+Benchmark dependencies are opt-in. The package only resolves Alamofire, Moya, Apollo, GRDB, and `swift-benchmark` when `KOMA_ENABLE_BENCHMARKS=1`; normal app consumers do not download them.
+
+The suite compares Koma against the bundled raw SQLite C API, GRDB, Core Data, and SwiftData, and measures end-to-end `networkFirstFallback` refresh cost with a fake transport. Official published results live in `docs/benchmarks/results.md`; each run must include raw output plus metadata for the Koma revision, Swift toolchain, platform, and command.
+
+## License
+
+Koma is released under the MIT license.
