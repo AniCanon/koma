@@ -2,7 +2,9 @@ import Foundation
 import KomaBenchmarkSupport
 
 func registerComparisonBenchmarks(small: [BenchmarkProject], large: [BenchmarkProject]) {
+    #if KOMA_INCLUDE_GRDB_BENCHMARKS
     registerGRDBBenchmarks(small: small, large: large)
+    #endif
 
     #if canImport(CoreData)
     registerCoreDataBenchmarks(small: small, large: large)

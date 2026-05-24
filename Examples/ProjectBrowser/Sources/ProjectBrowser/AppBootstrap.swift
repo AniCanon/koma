@@ -34,7 +34,6 @@ func makeProjectBrowserClient(
     transport: any KomaTransport
 ) async throws -> KomaClient {
     let schema = KomaSchema(modules: [ProjectSchema.self])
-    let store = try await SQLiteKomaStore(path: session.databasePath, schema: schema)
 
     let decoder = JSONDecoder()
     decoder.dateDecodingStrategy = .iso8601
@@ -42,9 +41,10 @@ func makeProjectBrowserClient(
     let encoder = JSONEncoder()
     encoder.dateEncodingStrategy = .iso8601
 
-    return KomaClient(
+    return try await KomaClient.sqlite(
+        database: .path(session.databasePath),
+        schema: schema,
         baseURL: session.apiBaseURL,
-        store: store,
         transport: transport,
         plugins: [
             .bearerAuth { try await tokenProvider.accessToken() },

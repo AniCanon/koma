@@ -17,7 +17,9 @@ struct ProjectRecord: KomaEntityRecord {
     var deletedAt: Date?
 }
 
-let store = try await SQLiteKomaStore(path: databaseURL.path)
+let store = try await SQLiteKomaStore.open(
+    database: .applicationSupport("AniCanon.sqlite", appDirectory: "AniCanon")
+)
 
 try await store.upsert([
     ProjectRecord(id: "1", name: "Akira Boards", deletedAt: nil)
@@ -33,15 +35,16 @@ See [Storage-Only Mode](storage-only.md) for the full guide.
 
 ## Storage Plus REST Refresh
 
-Create a SQLite store, configure a client, and query through macro-expanded resources or the store directly.
+Create a SQLite-backed client and query through macro-expanded resources or the store directly.
 
 ```swift
-let store = try await SQLiteKomaStore(path: databaseURL.path)
-
-let koma = KomaClient(
+let koma = try await KomaClient.sqlite(
+    database: .applicationSupport("AniCanon.sqlite", appDirectory: "AniCanon"),
+    schema: KomaSchema(modules: [
+        ProjectSchema.self,
+        CharacterSchema.self
+    ]),
     baseURL: apiBaseURL,
-    store: store,
-    transport: URLSessionKomaTransport(),
     plugins: [
         KomaBearerAuthPlugin { try await tokenProvider.token() },
         KomaRetryPlugin(maxAttempts: 3)
@@ -50,6 +53,27 @@ let koma = KomaClient(
 ```
 
 Use constructor injection at app boundaries. In tests or scoped jobs, `KomaContext.withClient(_:_:)` can provide a task-local client.
+
+For Android Swift, resolve the database path from the Android host app and pass it into the shared Swift layer:
+
+```kotlin
+val databaseFile = context.getDatabasePath("koma.sqlite")
+databaseFile.parentFile?.mkdirs()
+
+val runtime = SharedRuntime(
+    baseURL = BuildConfig.API_BASE_URL,
+    databasePath = databaseFile.absolutePath,
+)
+```
+
+```swift
+let koma = try await KomaClient.sqlite(
+    database: .path(databasePath),
+    schema: appSchema,
+    baseURL: baseURL,
+    plugins: plugins
+)
+```
 
 ```swift
 let snapshot = try await ProjectResources.client(in: koma)

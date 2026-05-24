@@ -4,9 +4,12 @@ import KomaAndroidBenchmarkCore
 @MainActor
 enum KomaAndroidBenchmarkMain {
     static func main() async throws {
-        try await AndroidBenchmarkRunner.run(
-            makeKomaAndroidBenchmarks()
-                + makeAndroidGRDBBenchmarks()
-        )
+        var benchmarks = makeKomaAndroidBenchmarks()
+
+        #if KOMA_INCLUDE_GRDB_BENCHMARKS
+        benchmarks += makeAndroidGRDBBenchmarks()
+        #endif
+
+        try await AndroidBenchmarkRunner.run(benchmarks)
     }
 }

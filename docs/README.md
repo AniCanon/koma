@@ -7,6 +7,7 @@ DocC is still used for generated Swift API reference, but the broader handbook l
 ## Start Here
 
 - [Getting Started](guides/getting-started.md)
+- [App Startup](guides/app-startup.md)
 - [Storage-Only Mode](guides/storage-only.md)
 - [Examples](guides/examples.md)
 - [Philosophy](guides/philosophy.md)

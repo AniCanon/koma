@@ -1,30 +1,48 @@
 # Official Benchmark Results
 
-No official Koma benchmark result has been published yet.
-
-The first publishable run should be created with:
-
-```sh
-scripts/benchmark-official.sh .benchmark-results/koma-<version>-<device>
-```
-
-Then attach the run directory to the GitHub release and add a row below.
+Koma publishes small p50 snapshots in the README and keeps fuller benchmark context here. Release notes should attach the raw `.benchmark-results` directory used for any quoted numbers.
 
 | Koma Version | Environment | Swift | Artifact | Notes |
 | --- | --- | --- | --- | --- |
-| Pending | Pending first release run | Pending | Pending | Establish baseline before quoting numbers in README. |
+| Open-source prep | Darwin 25.4.0 arm64, SwiftPM benchmark runner | Swift 6.3 release | `.benchmark-results/koma-open-source-apple-20260524` | Apple-platform baseline for the iOS-side runtime, not an on-device iOS claim. Host GRDB storage comparison was disabled for this run because this Swift 6.3 toolchain crashed while compiling the GRDB benchmark target. |
+| Open-source prep | Google sdk_gphone16k_arm64 emulator, Android 17 SDK 37 | Swift 6.3 release Android SDK | `.benchmark-results/koma-open-source-android-emulator-20260524` | Android smoke baseline with Koma, raw SQLite, GRDB, and SQLite.swift. |
+
+## Open-Source Prep Baseline
+
+Captured May 24, 2026 from the open-source preparation working tree. Lower is better.
+
+### Apple/Darwin Storage
+
+| Operation | Koma | Raw SQLite | Core Data | SwiftData |
+| --- | ---: | ---: | ---: | ---: |
+| Open + ensure schema | 0.815 ms | n/a | 1.662 ms | 1.622 ms |
+| Upsert or insert 1k records | 2.055 ms | 1.938 ms | 8.282 ms | 53.000 ms |
+| Filtered fetch 10k, limit 100 | 12.000 ms | 11.000 ms | 54.000 ms | 550.000 ms |
+| Inner join filter 10k, limit 100 | 33.000 ms | 30.000 ms | n/a | n/a |
+
+### Android Emulator Storage
+
+| Operation | Koma | Raw SQLite | GRDB | SQLite.swift |
+| --- | ---: | ---: | ---: | ---: |
+| Open + ensure schema | 4.432 ms | 4.540 ms | 1.939 ms | 4.800 ms |
+| Upsert 1k records | 5.487 ms | 5.904 ms | 12.054 ms | 6.406 ms |
+| Filtered fetch 10k, limit 100 | 0.409 ms | 0.383 ms | 0.484 ms | 0.472 ms |
+| Inner join filter 10k, limit 100 | 5.023 ms | 4.963 ms | 4.929 ms | 4.835 ms |
+| Left join missing 10k, limit 100 | 7.266 ms | 7.208 ms | 7.231 ms | 7.213 ms |
+
+### JSON and Request Pipeline
+
+| Platform | Operation | Koma | Foundation | YYJSON | Other |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Apple/Darwin | Decode 1k records | 0.283 ms | 1.335 ms | 0.529 ms | n/a |
+| Apple/Darwin | Encode 1k records | 0.381 ms | 1.146 ms | 0.415 ms | n/a |
+| Apple/Darwin | Mock GET + decode 1k | 0.371 ms | 1.469 ms | n/a | Alamofire 1.555 ms, Moya 1.556 ms, Apollo 41.000 ms |
+| Android emulator | Decode 1k records | 0.420 ms | 1.640 ms | 0.949 ms | n/a |
+| Android emulator | Encode 1k records | 0.591 ms | 1.378 ms | 0.739 ms | n/a |
 
 ## Android Results
 
-No Android device result has been published yet.
-
-The first Android run should be created with:
-
-```sh
-scripts/benchmark-android.sh .benchmark-results/koma-android-<version>-<device>
-```
-
-Android results must stay separate from host macOS results. Quote physical-device runs for releases; keep emulator runs for smoke checks and regressions.
+Android results must stay separate from host macOS results. Quote physical-device runs for release claims; keep emulator runs for smoke checks and regressions.
 
 ## Join API Local Baseline
 

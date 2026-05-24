@@ -44,7 +44,9 @@ Records are passive value types. They describe table shape and queryable columns
 ```swift
 import KomaSQLite
 
-let store = try await SQLiteKomaStore(path: databaseURL.path)
+let store = try await SQLiteKomaStore.open(
+    database: .applicationSupport("AniCanon.sqlite", appDirectory: "AniCanon")
+)
 ```
 
 With migrations:
@@ -55,7 +57,10 @@ let schema = KomaSchema(
     migrationPacks: [ProjectMigrations.self]
 )
 
-let store = try await SQLiteKomaStore(path: databaseURL.path, schema: schema)
+let store = try await SQLiteKomaStore.open(
+    database: .applicationSupport("AniCanon.sqlite", appDirectory: "AniCanon"),
+    schema: schema
+)
 ```
 
 ## Write Data

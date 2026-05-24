@@ -22,6 +22,9 @@
 **
 **    
 */
+#if defined(__clang__)
+# pragma clang diagnostic ignored "-Wambiguous-macro"
+#endif
 #ifndef SQLITE_AMALGAMATION
 #define SQLITE_CORE 1
 #define SQLITE_AMALGAMATION 1

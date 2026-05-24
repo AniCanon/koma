@@ -13,6 +13,38 @@ The bundled SQLite target keeps SQLite behavior predictable across iOS and Andro
 
 When integrating into an app, expose app-specific clients over the Android bridge rather than exposing Koma types directly. This keeps platform UI code insulated from storage details.
 
+Android owns the app sandbox path, so pass an explicit database path from Kotlin into your shared Swift runtime:
+
+```kotlin
+class MyApplication : Application() {
+    override fun onCreate() {
+        super.onCreate()
+
+        val databaseFile = getDatabasePath("koma.sqlite")
+        databaseFile.parentFile?.mkdirs()
+
+        sharedRuntime = SharedRuntime(
+            baseURL = BuildConfig.API_BASE_URL,
+            databasePath = databaseFile.absolutePath,
+        )
+    }
+}
+```
+
+Then create Koma from Swift with the cross-platform path API:
+
+```swift
+let koma = try await KomaClient.sqlite(
+    database: .path(databasePath),
+    schema: KomaSchema(modules: [ProjectSchema.self]),
+    baseURL: baseURL,
+    plugins: [
+        KomaBearerAuthPlugin { try await tokenProvider.token() },
+        KomaRetryPlugin(maxAttempts: 2)
+    ]
+)
+```
+
 Benchmark Android runtime behavior with:
 
 ```sh

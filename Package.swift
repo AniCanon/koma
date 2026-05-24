@@ -5,6 +5,8 @@ import Foundation
 import PackageDescription
 
 let enableBenchmarks = ProcessInfo.processInfo.environment["KOMA_ENABLE_BENCHMARKS"] == "1"
+let includeGRDBBenchmarks = enableBenchmarks
+    && ProcessInfo.processInfo.environment["KOMA_DISABLE_GRDB_BENCHMARKS"] != "1"
 
 let dependencies: [Package.Dependency] = [
     .package(url: "https://github.com/swiftlang/swift-syntax.git", "601.0.0" ..< "604.0.0")
@@ -12,7 +14,6 @@ let dependencies: [Package.Dependency] = [
     .package(url: "https://github.com/Alamofire/Alamofire.git", exact: "5.12.0"),
     .package(url: "https://github.com/Moya/Moya.git", exact: "15.0.3"),
     .package(url: "https://github.com/apollographql/apollo-ios.git", exact: "2.1.2"),
-    .package(url: "https://github.com/groue/GRDB.swift.git", exact: "7.10.0"),
     .package(url: "https://github.com/mattt/swift-yyjson.git", exact: "0.5.0"),
     .package(
         url: "https://github.com/stephencelis/SQLite.swift.git",
@@ -20,7 +21,9 @@ let dependencies: [Package.Dependency] = [
         traits: [.trait(name: "SQLiteSwiftCSQLite")]
     ),
     .package(url: "https://github.com/ordo-one/benchmark", exact: "1.33.0")
-] : [])
+] + (includeGRDBBenchmarks ? [
+    .package(url: "https://github.com/groue/GRDB.swift.git", exact: "7.10.0")
+] : []) : [])
 
 let benchmarkTargets: [Target] = enableBenchmarks ? [
     .target(
@@ -65,11 +68,14 @@ let benchmarkTargets: [Target] = enableBenchmarks ? [
             .product(name: "Apollo", package: "apollo-ios"),
             .product(name: "ApolloAPI", package: "apollo-ios"),
             .product(name: "Benchmark", package: "benchmark"),
-            .product(name: "GRDB", package: "GRDB.swift"),
             .product(name: "Moya", package: "Moya"),
             .product(name: "YYJSON", package: "swift-yyjson")
-        ],
+        ] + (includeGRDBBenchmarks ? [
+            .product(name: "GRDB", package: "GRDB.swift")
+        ] : []),
         path: "Benchmarks/KomaBenchmarks",
+        exclude: includeGRDBBenchmarks ? [] : ["GRDBBenchmarks.swift"],
+        swiftSettings: includeGRDBBenchmarks ? [.define("KOMA_INCLUDE_GRDB_BENCHMARKS")] : [],
         plugins: [
             .plugin(name: "BenchmarkPlugin", package: "benchmark")
         ]
@@ -82,10 +88,13 @@ let benchmarkTargets: [Target] = enableBenchmarks ? [
             "KomaBenchmarkSupport",
             "KomaBenchmarkSQLiteSupport",
             "KomaSQLite",
-            .product(name: "GRDB", package: "GRDB.swift"),
             .product(name: "YYJSON", package: "swift-yyjson")
-        ],
-        path: "Benchmarks/KomaAndroidBenchmarks"
+        ] + (includeGRDBBenchmarks ? [
+            .product(name: "GRDB", package: "GRDB.swift")
+        ] : []),
+        path: "Benchmarks/KomaAndroidBenchmarks",
+        exclude: includeGRDBBenchmarks ? [] : ["AndroidGRDBBenchmarks.swift"],
+        swiftSettings: includeGRDBBenchmarks ? [.define("KOMA_INCLUDE_GRDB_BENCHMARKS")] : []
     ),
     .executableTarget(
         name: "KomaAndroidSQLiteSwiftBenchmarks",
@@ -137,7 +146,7 @@ let package = Package(
         ),
         .target(
             name: "KomaHTTP",
-            dependencies: ["Koma"]
+            dependencies: ["Koma", "KomaSQLite"]
         ),
         .target(
             name: "KomaTesting",
