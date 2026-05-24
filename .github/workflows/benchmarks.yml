@@ -20,11 +20,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Swift
+        uses: SwiftyLab/setup-swift@v1.14.0
+        with:
+          swift-version: "6.3"
+
       - name: Swift Version
         run: swift --version
 
       - name: Run Benchmarks
-        run: scripts/benchmark-official.sh .benchmark-results/host-macos --filter '.*(koma|rawsqlite|grdb|coredata|swiftdata).*'
+        env:
+          KOMA_DISABLE_GRDB_BENCHMARKS: "1"
+        run: scripts/benchmark-official.sh .benchmark-results/host-macos --filter '.*(koma|rawsqlite|coredata|swiftdata).*'
 
       - name: Upload Benchmark Artifact
         uses: actions/upload-artifact@v4
