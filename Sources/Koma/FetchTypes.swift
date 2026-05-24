@@ -7,7 +7,7 @@ public struct KomaOperation: Sendable {
     public let path: String
     public let queryItems: [URLQueryItem]
     public let pathValues: [String: String]
-    public let body: Data?
+    public let body: KomaRequestBody?
     public let cache: KomaCacheDescriptor?
     public let adapter: (any KomaAnyPersistenceAdapter.Type)?
     public let isRefreshable: Bool
@@ -18,7 +18,7 @@ public struct KomaOperation: Sendable {
         path: String,
         queryItems: [URLQueryItem] = [],
         pathValues: [String: String] = [:],
-        body: Data? = nil,
+        body: KomaRequestBody? = nil,
         cache: KomaCacheDescriptor? = nil,
         adapter: (any KomaAnyPersistenceAdapter.Type)? = nil,
         isRefreshable: Bool = false
@@ -43,6 +43,23 @@ public struct KomaOperation: Sendable {
             )
         }
         return resolved
+    }
+}
+
+@_documentation(visibility: private)
+public struct KomaRequestBody: @unchecked Sendable {
+    private let result: Result<Data, Error>
+
+    public init(_ encode: () throws -> Data) {
+        result = Result(catching: encode)
+    }
+
+    public static func data(_ data: Data) -> Self {
+        Self { data }
+    }
+
+    public func data() throws -> Data {
+        try result.get()
     }
 }
 

@@ -124,107 +124,7 @@ public final class RawSQLiteBenchmarkDatabase {
         }
     }
 
-    public func fetchActiveProjects(limit: Int) throws -> [BenchmarkProject] {
-        let statement = try prepare(
-            """
-            SELECT id, name, slug, deletedAt, score, updatedAt, summary
-            FROM benchmark_projects
-            WHERE deletedAt IS NULL
-            ORDER BY name ASC
-            LIMIT ?
-            """
-        )
-        defer { sqlite3_finalize(statement) }
-
-        sqlite3_bind_int64(statement, 1, Int64(limit))
-
-        var projects: [BenchmarkProject] = []
-        while true {
-            let step = sqlite3_step(statement)
-            if step == SQLITE_DONE {
-                break
-            }
-            guard step == SQLITE_ROW else {
-                throw RawSQLiteBenchmarkError.executionFailed(errorMessage)
-            }
-            projects.append(
-                BenchmarkProject(
-                    id: Self.text(statement, 0),
-                    name: Self.text(statement, 1),
-                    slug: Self.text(statement, 2),
-                    deletedAt: sqlite3_column_type(statement, 3) == SQLITE_NULL ? nil : sqlite3_column_double(statement, 3),
-                    score: Int(sqlite3_column_int64(statement, 4)),
-                    updatedAt: sqlite3_column_double(statement, 5),
-                    summary: Self.text(statement, 6)
-                )
-            )
-        }
-        return projects
-    }
-
-    public func fetchProjectsWithLeadCharacters(limit: Int) throws -> [BenchmarkProject] {
-        try fetchProjects(
-            sql: """
-            SELECT DISTINCT p.id, p.name, p.slug, p.deletedAt, p.score, p.updatedAt, p.summary
-            FROM benchmark_projects p
-            INNER JOIN benchmark_characters c ON p.id = c.projectId
-            WHERE p.deletedAt IS NULL AND c.role = 'lead'
-            ORDER BY p.name ASC
-            LIMIT ?
-            """,
-            limit: limit
-        )
-    }
-
-    public func fetchProjectsWithoutCharacters(limit: Int) throws -> [BenchmarkProject] {
-        try fetchProjects(
-            sql: """
-            SELECT DISTINCT p.id, p.name, p.slug, p.deletedAt, p.score, p.updatedAt, p.summary
-            FROM benchmark_projects p
-            LEFT JOIN benchmark_characters c ON p.id = c.projectId
-            WHERE p.deletedAt IS NULL AND c.id IS NULL
-            ORDER BY p.name ASC
-            LIMIT ?
-            """,
-            limit: limit
-        )
-    }
-
-    public func fetchProjectsRightJoinedToLeadCharacters(limit: Int) throws -> [BenchmarkProject] {
-        try fetchProjects(
-            sql: """
-            SELECT DISTINCT p.id, p.name, p.slug, p.deletedAt, p.score, p.updatedAt, p.summary
-            FROM benchmark_projects p
-            RIGHT JOIN benchmark_characters c ON p.id = c.projectId
-            WHERE p.id IS NOT NULL AND p.deletedAt IS NULL AND c.role = 'lead'
-            ORDER BY p.name ASC
-            LIMIT ?
-            """,
-            limit: limit
-        )
-    }
-
-    private func fetchProjects(sql: String, limit: Int) throws -> [BenchmarkProject] {
-        let statement = try prepare(sql)
-        defer { sqlite3_finalize(statement) }
-
-        sqlite3_bind_int64(statement, 1, Int64(limit))
-
-        var projects: [BenchmarkProject] = []
-        while true {
-            let step = sqlite3_step(statement)
-            if step == SQLITE_DONE {
-                break
-            }
-            guard step == SQLITE_ROW else {
-                throw RawSQLiteBenchmarkError.executionFailed(errorMessage)
-            }
-            projects.append(Self.project(from: statement))
-        }
-        return projects
-    }
-
-    private var errorMessage: String {
+    var errorMessage: String {
         guard let connection,
               let message = sqlite3_errmsg(connection)
         else {
@@ -242,7 +142,7 @@ public final class RawSQLiteBenchmarkDatabase {
         }
     }
 
-    private func prepare(_ sql: String) throws -> OpaquePointer {
+    func prepare(_ sql: String) throws -> OpaquePointer {
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(connection, sql, -1, &statement, nil) == SQLITE_OK,
               let statement
@@ -251,25 +151,9 @@ public final class RawSQLiteBenchmarkDatabase {
         }
         return statement
     }
-
-    private static func text(_ statement: OpaquePointer, _ index: Int32) -> String {
-        sqlite3_column_text(statement, index).map { String(cString: $0) } ?? ""
-    }
-
-    private static func project(from statement: OpaquePointer) -> BenchmarkProject {
-        BenchmarkProject(
-            id: text(statement, 0),
-            name: text(statement, 1),
-            slug: text(statement, 2),
-            deletedAt: sqlite3_column_type(statement, 3) == SQLITE_NULL ? nil : sqlite3_column_double(statement, 3),
-            score: Int(sqlite3_column_int64(statement, 4)),
-            updatedAt: sqlite3_column_double(statement, 5),
-            summary: text(statement, 6)
-        )
-    }
 }
 
-private enum RawSQLiteBenchmarkError: Error {
+enum RawSQLiteBenchmarkError: Error {
     case openFailed(String)
     case executionFailed(String)
 }

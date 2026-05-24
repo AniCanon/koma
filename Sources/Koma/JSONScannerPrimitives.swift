@@ -1,4 +1,4 @@
-extension _KomaJSONScanner {
+extension KomaJSONScanner {
     @inline(__always)
     mutating func skipWhitespace() throws {
         while let byte = peek(), byte == 32 || byte == 10 || byte == 13 || byte == 9 {
@@ -45,7 +45,7 @@ extension _KomaJSONScanner {
         return true
     }
 
-    func unexpectedByte() -> _KomaJSONError {
+    func unexpectedByte() -> KomaJSONFastPathError {
         guard let byte = peek() else {
             return .unexpectedEnd
         }

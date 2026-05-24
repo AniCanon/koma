@@ -22,7 +22,7 @@ public struct KomaModelMacro: MemberMacro, ExtensionMacro {
         let relationMembers = relations.flatMap { relation in
             [
                 """
-                public static let _komaRelation\(relation.capitalizedName) = \(relation.kind.typeName)<\(recordType), \(relation
+                public static let komaRelation\(relation.capitalizedName) = \(relation.kind.typeName)<\(recordType), \(relation
                     .relatedRecord), \(relation.relatedModel)>(
                     name: "\(relation.name)",
                     localColumn: "\(relation.localColumn)",
@@ -32,7 +32,7 @@ public struct KomaModelMacro: MemberMacro, ExtensionMacro {
                 """
                 public var \(relation.name): \(relation.kind.queryTypeName)<\(recordType), \(relation.relatedRecord), \(relation
                     .relatedModel)> {
-                    self.relation(Self._komaRelation\(relation.capitalizedName))
+                    self.relation(Self.komaRelation\(relation.capitalizedName))
                 }
                 """
             ]
@@ -43,15 +43,15 @@ public struct KomaModelMacro: MemberMacro, ExtensionMacro {
             public typealias Record = \(raw: recordType)
             """,
             """
-            public let _komaRecord: \(raw: recordType)
+            public let komaRecord: \(raw: recordType)
             """,
             """
-            public let _komaGraphContext: KomaGraphContext
+            public let komaGraphContext: KomaGraphContext
             """,
             """
             public init(record: \(raw: recordType), graphContext: KomaGraphContext) {
-                self._komaRecord = record
-                self._komaGraphContext = graphContext
+                self.komaRecord = record
+                self.komaGraphContext = graphContext
                 \(raw: assignments)
             }
             """

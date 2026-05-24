@@ -17,8 +17,8 @@ public protocol KomaModel: Sendable {
 
     init(record: Record, graphContext: KomaGraphContext)
 
-    var _komaRecord: Record { get }
-    var _komaGraphContext: KomaGraphContext { get }
+    var komaRecord: Record { get }
+    var komaGraphContext: KomaGraphContext { get }
 }
 
 public extension KomaModel {
@@ -27,8 +27,8 @@ public extension KomaModel {
         _ relation: KomaToManyRelation<Record, RelatedRecord, RelatedModel>
     ) -> KomaRelationQuery<Record, RelatedRecord, RelatedModel> where RelatedModel.Record == RelatedRecord {
         KomaRelationQuery(
-            graphContext: _komaGraphContext,
-            owner: _komaRecord,
+            graphContext: komaGraphContext,
+            owner: komaRecord,
             relation: relation
         )
     }
@@ -38,8 +38,8 @@ public extension KomaModel {
         _ relation: KomaToOneRelation<Record, RelatedRecord, RelatedModel>
     ) -> KomaToOneRelationQuery<Record, RelatedRecord, RelatedModel> where RelatedModel.Record == RelatedRecord {
         KomaToOneRelationQuery(
-            graphContext: _komaGraphContext,
-            owner: _komaRecord,
+            graphContext: komaGraphContext,
+            owner: komaRecord,
             relation: relation
         )
     }

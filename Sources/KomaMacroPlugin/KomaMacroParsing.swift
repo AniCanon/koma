@@ -1,80 +1,4 @@
 import Foundation
-import SwiftSyntax
-
-extension VariableDeclSyntax {
-    func hasAttribute(_ name: String) -> Bool {
-        attributes.contains { element in
-            guard case let .attribute(attribute) = element else {
-                return false
-            }
-            return attribute.attributeName.source == name
-        }
-    }
-}
-
-extension EnumCaseDeclSyntax {
-    func hasAttribute(_ name: String) -> Bool {
-        attributes.contains { element in
-            guard case let .attribute(attribute) = element else {
-                return false
-            }
-            return attribute.attributeName.source == name
-        }
-    }
-}
-
-extension SyntaxProtocol {
-    var source: String {
-        description.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-}
-
-extension KomaEntityMacro {
-    static func stringLiteral(named name: String, in text: String) -> String? {
-        KomaMacroParsing.stringLiteral(named: name, in: text)
-    }
-
-    static func metatypeLiteral(named name: String, in text: String) -> String? {
-        KomaMacroParsing.metatypeLiteral(named: name, in: text)
-    }
-}
-
-extension KomaResourceMacro {
-    static func stringLiteral(named name: String, in text: String) -> String? {
-        KomaMacroParsing.stringLiteral(named: name, in: text)
-    }
-
-    static func firstStringLiteral(in text: String) -> String? {
-        KomaMacroParsing.firstStringLiteral(in: text)
-    }
-
-    static func metatypeLiteral(named name: String, in text: String) -> String? {
-        KomaMacroParsing.metatypeLiteral(named: name, in: text)
-    }
-
-    static func firstMetatypeLiteral(in text: String) -> String? {
-        KomaMacroParsing.firstMetatypeLiteral(in: text)
-    }
-
-    static func outputType(in text: String) -> String? {
-        guard let expression = KomaMacroParsing.argumentExpression(named: "output", in: text) else {
-            return nil
-        }
-        return expression.replacingOccurrences(of: ".self", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    static func argumentExpression(named name: String, in text: String) -> String? {
-        KomaMacroParsing.argumentExpression(named: name, in: text)
-    }
-
-    static func routeArgument(named name: String, in text: String) -> String? {
-        KomaMacroParsing.argumentExpressionInCall(named: name, in: text)
-    }
-
-    static func splitTopLevel(_ text: String) -> [String] {
-        KomaMacroParsing.splitTopLevel(text)
-    }
-}
 
 enum KomaMacroParsing {
     static func stringLiteral(named name: String, in text: String) -> String? {
@@ -90,12 +14,20 @@ enum KomaMacroParsing {
         }
         var index = text.index(after: open)
         var value = ""
+        var isEscaped = false
         while index < text.endIndex {
             let character = text[index]
-            if character == "\"" {
+            if isEscaped {
+                value.append(character)
+                isEscaped = false
+            } else if character == "\\" {
+                value.append(character)
+                isEscaped = true
+            } else if character == "\"" {
                 return value
+            } else {
+                value.append(character)
             }
-            value.append(character)
             index = text.index(after: index)
         }
         return nil
@@ -171,10 +103,15 @@ enum KomaMacroParsing {
         var depth = 0
         var index = open
         var isInsideString = false
+        var isEscaped = false
 
         while index < text.endIndex {
             let character = text[index]
-            if character == "\"" {
+            if isInsideString, isEscaped {
+                isEscaped = false
+            } else if isInsideString, character == "\\" {
+                isEscaped = true
+            } else if character == "\"" {
                 isInsideString.toggle()
             } else if !isInsideString {
                 if character == "(" {
@@ -205,9 +142,26 @@ enum KomaMacroParsing {
         var result: [String] = []
         var current = ""
         var depth = 0
+        var isInsideString = false
+        var isEscaped = false
 
         for character in text {
+            if isInsideString {
+                current.append(character)
+                if isEscaped {
+                    isEscaped = false
+                } else if character == "\\" {
+                    isEscaped = true
+                } else if character == "\"" {
+                    isInsideString = false
+                }
+                continue
+            }
+
             switch character {
+            case "\"":
+                isInsideString = true
+                current.append(character)
             case "(", "[", "<":
                 depth += 1
                 current.append(character)

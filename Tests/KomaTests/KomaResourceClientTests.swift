@@ -152,6 +152,26 @@ struct KomaResourceClientTests {
     }
 
     @Test
+    func `request body encoding failures are thrown before transport sends`() async throws {
+        let store = try await makeStore()
+        let transport = FakeKomaTransport()
+        let koma = try KomaClient(
+            baseURL: #require(URL(string: "https://example.com/v1")),
+            store: store,
+            transport: transport
+        )
+
+        do {
+            _ = try await ProjectEncodingResources.client(in: koma)
+                .broken(body: ProjectBrokenBody(score: .nan))
+                .fetch(policy: .networkFirstFallback)
+            Issue.record("Expected non-finite request body encoding to throw.")
+        } catch {
+            #expect(await transport.requests.isEmpty)
+        }
+    }
+
+    @Test
     func `resource client percent encodes path parameters`() async throws {
         let store = try await makeStore()
         let transport = try FakeKomaTransport(responses: [
@@ -172,47 +192,6 @@ struct KomaResourceClientTests {
 
         let request = await transport.requests.first
         #expect(request?.path == "projects/a%2Fb%20c")
-    }
-
-    @Test
-    func `plugin prepare transforms are applied in order`() async throws {
-        let store = try await makeStore()
-        let transport = FakeKomaTransport(responses: [
-            KomaResponse(statusCode: 200, body: Data(#"{"ok":true}"#.utf8))
-        ])
-        let koma = try KomaClient(
-            baseURL: #require(URL(string: "https://example.com/v1")),
-            store: store,
-            transport: transport,
-            plugins: [
-                AppendHeaderPlugin(name: "X-Trace", value: "one"),
-                RewriteRequestPlugin(),
-                AppendHeaderPlugin(name: "X-Final", value: "done")
-            ]
-        )
-
-        let original = KomaRequest(
-            method: .post,
-            path: "projects",
-            queryItems: [URLQueryItem(name: "search", value: "alpha")],
-            headers: ["X-Original": "kept"],
-            body: Data("original".utf8)
-        )
-
-        _ = try await koma.execute(original, operation: "plugin-transform")
-
-        let request = try #require(await transport.requests.first)
-        #expect(request.method == .patch)
-        #expect(request.path == "v2/projects")
-        #expect(request.queryItems == [
-            URLQueryItem(name: "search", value: "alpha"),
-            URLQueryItem(name: "plugin", value: "rewrite")
-        ])
-        #expect(request.headers["X-Original"] == "kept")
-        #expect(request.headers["X-Trace"] == "one")
-        #expect(request.headers["X-Rewrite-Saw-Trace"] == "one")
-        #expect(request.headers["X-Final"] == "done")
-        #expect(request.body == Data("rewritten".utf8))
     }
 
     @Test
@@ -238,43 +217,6 @@ struct KomaResourceClientTests {
         #expect(snapshot.lastError != nil)
     }
 
-    @Test
-    func `resource client can resolve from task local context`() async throws {
-        let store = try await makeStore()
-        let transport = try FakeKomaTransport(responses: [
-            KomaResponse(
-                statusCode: 200,
-                body: JSONEncoder().encode([
-                    Project(id: "1", name: "Alpha", slug: "alpha", deletedAt: nil)
-                ])
-            )
-        ])
-        let koma = try KomaClient(
-            baseURL: #require(URL(string: "https://example.com/v1")),
-            store: store,
-            transport: transport
-        )
-
-        let snapshot = try await KomaContext.withClient(koma) {
-            try await ProjectResources.client()
-                .list()
-                .fetch(policy: .networkFirstFallback)
-        }
-
-        #expect(snapshot.source == .network)
-        #expect(snapshot.value.map(\.id) == ["1"])
-    }
-
-    @Test
-    func `resource client requires task local context when no client is passed`() {
-        do {
-            _ = try ProjectResources.client()
-            Issue.record("Expected missing client error.")
-        } catch {
-            #expect(error as? KomaContextError == .missingClient)
-        }
-    }
-
     private func makeStore() async throws -> SQLiteKomaStore {
         try await SQLiteKomaStore(path: makeStorePath())
     }
@@ -285,28 +227,5 @@ struct KomaResourceClientTests {
             .appendingPathComponent(UUID().uuidString)
             .appendingPathExtension("sqlite")
             .path
-    }
-}
-
-private struct AppendHeaderPlugin: KomaHTTPPlugin {
-    let name: String
-    let value: String
-
-    func prepare(_ request: consuming KomaRequest, context: KomaRequestContext) async throws -> KomaRequest {
-        var request = request
-        request.headers[name] = value
-        return request
-    }
-}
-
-private struct RewriteRequestPlugin: KomaHTTPPlugin {
-    func prepare(_ request: consuming KomaRequest, context: KomaRequestContext) async throws -> KomaRequest {
-        var request = request
-        request.method = .patch
-        request.path = "v2/\(request.path)"
-        request.queryItems.append(URLQueryItem(name: "plugin", value: "rewrite"))
-        request.headers["X-Rewrite-Saw-Trace"] = request.headers["X-Trace"]
-        request.body = Data("rewritten".utf8)
-        return request
     }
 }

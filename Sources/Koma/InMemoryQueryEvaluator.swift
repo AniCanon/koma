@@ -9,7 +9,7 @@ enum KomaInMemoryQueryEvaluator {
             throw KomaMappingError.unsupportedOutput("Cannot evaluate joined queries in memory.")
         }
 
-        guard Record._komaSQLiteFastPath else {
+        guard Record.self is any KomaSQLiteFastPathRecord.Type else {
             return records
         }
 
@@ -18,9 +18,12 @@ enum KomaInMemoryQueryEvaluator {
         projected.reserveCapacity(records.count)
 
         for record in records {
-            var values: [_KomaSQLiteValue] = []
+            guard let fastRecord = record as? any KomaSQLiteFastPathRecord else {
+                return records
+            }
+            var values: [KomaSQLiteStorageValue] = []
             values.reserveCapacity(Record.komaColumns.count)
-            record._komaSQLiteValues(into: &values)
+            fastRecord.komaSQLiteValues(into: &values)
             projected.append(ProjectedRecord(record: record, values: values))
         }
 
@@ -61,7 +64,7 @@ enum KomaInMemoryQueryEvaluator {
 
     private static func matches(
         _ predicate: KomaPredicate,
-        values: borrowing [_KomaSQLiteValue],
+        values: borrowing [KomaSQLiteStorageValue],
         columns: borrowing [String: Int]
     ) throws -> Bool {
         switch predicate.operation {
@@ -114,9 +117,9 @@ enum KomaInMemoryQueryEvaluator {
 
     private static func value(
         for predicate: KomaPredicate,
-        values: borrowing [_KomaSQLiteValue],
+        values: borrowing [KomaSQLiteStorageValue],
         columns: borrowing [String: Int]
-    ) throws -> _KomaSQLiteValue {
+    ) throws -> KomaSQLiteStorageValue {
         guard let column = predicate.column,
               let index = columns[column],
               values.indices.contains(index)
@@ -126,11 +129,11 @@ enum KomaInMemoryQueryEvaluator {
         return values[index]
     }
 
-    private static func equals(_ stored: _KomaSQLiteValue, _ expected: KomaValue) -> Bool {
+    private static func equals(_ stored: KomaSQLiteStorageValue, _ expected: KomaValue) -> Bool {
         compare(stored, expected) == .orderedSame
     }
 
-    private static func compare(_ lhs: _KomaSQLiteValue, _ rhs: KomaValue) -> ComparisonResult {
+    private static func compare(_ lhs: KomaSQLiteStorageValue, _ rhs: KomaValue) -> ComparisonResult {
         switch (lhs, rhs) {
         case let (.text(lhs), .string(rhs)):
             return lhs.compare(rhs)
@@ -151,7 +154,7 @@ enum KomaInMemoryQueryEvaluator {
         }
     }
 
-    private static func compare(_ lhs: _KomaSQLiteValue, _ rhs: _KomaSQLiteValue) -> ComparisonResult {
+    private static func compare(_ lhs: KomaSQLiteStorageValue, _ rhs: KomaSQLiteStorageValue) -> ComparisonResult {
         switch (lhs, rhs) {
         case (.null, .null):
             return .orderedSame
@@ -199,6 +202,6 @@ enum KomaInMemoryQueryEvaluator {
 
     private struct ProjectedRecord<Record> {
         let record: Record
-        let values: [_KomaSQLiteValue]
+        let values: [KomaSQLiteStorageValue]
     }
 }

@@ -43,49 +43,52 @@ public enum KomaQueryEncoder {
         try encoder.encode(value)
     }
 
-    public static func bodyData<Record: KomaEntityRecord>(
-        from value: borrowing Record,
+    public static func bodyData(
+        from value: borrowing some KomaEntityRecord & KomaJSONFastPathRecord,
         encoder: JSONEncoder = JSONEncoder()
     ) throws -> Data {
-        guard Record._komaJSONFastPath,
-              canUseKomaRecordFastPath(encoder: encoder)
-        else {
-            return try encoder.encode(value)
-        }
-        return try value._komaJSONData()
+        try bodyData(from: value, encoder: encoder, optimization: .automatic)
     }
 
-    public static func bodyData<Record: KomaEntityRecord>(
-        from value: borrowing [Record],
+    public static func bodyData(
+        from value: borrowing [some KomaEntityRecord & KomaJSONFastPathRecord],
         encoder: JSONEncoder = JSONEncoder()
     ) throws -> Data {
-        guard Record._komaJSONFastPath,
-              canUseKomaRecordFastPath(encoder: encoder)
-        else {
-            return try encoder.encode(value)
-        }
-        return try Record._komaJSONData(records: value)
+        try bodyData(from: value, encoder: encoder, optimization: .automatic)
     }
 
-    public static func bodyDataIfPossible(
+    public static func bodyData(
         from value: some Encodable,
-        encoder: JSONEncoder = JSONEncoder()
-    ) -> Data? {
-        try? bodyData(from: value, encoder: encoder)
+        encoder: JSONEncoder = JSONEncoder(),
+        optimization: KomaJSONOptimization
+    ) throws -> Data {
+        try bodyData(from: value, encoder: encoder)
     }
 
-    public static func bodyDataIfPossible(
-        from value: borrowing some KomaEntityRecord,
-        encoder: JSONEncoder = JSONEncoder()
-    ) -> Data? {
-        try? bodyData(from: value, encoder: encoder)
+    public static func bodyData(
+        from value: borrowing some KomaEntityRecord & KomaJSONFastPathRecord,
+        encoder: JSONEncoder = JSONEncoder(),
+        optimization: KomaJSONOptimization = .automatic
+    ) throws -> Data {
+        guard optimization == .automatic,
+              canUseKomaRecordFastPath(encoder: encoder)
+        else {
+            return try encoder.encode(value)
+        }
+        return try value.komaJSONData()
     }
 
-    public static func bodyDataIfPossible(
-        from value: borrowing [some KomaEntityRecord],
-        encoder: JSONEncoder = JSONEncoder()
-    ) -> Data? {
-        try? bodyData(from: value, encoder: encoder)
+    public static func bodyData<Record: KomaEntityRecord & KomaJSONFastPathRecord>(
+        from value: borrowing [Record],
+        encoder: JSONEncoder = JSONEncoder(),
+        optimization: KomaJSONOptimization = .automatic
+    ) throws -> Data {
+        guard optimization == .automatic,
+              canUseKomaRecordFastPath(encoder: encoder)
+        else {
+            return try encoder.encode(value)
+        }
+        return try Record.komaJSONData(records: value)
     }
 
     private static func stringValue(_ value: Any) -> String {

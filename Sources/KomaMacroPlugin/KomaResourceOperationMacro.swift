@@ -106,7 +106,15 @@ extension KomaResourceMacro {
         guard let bodyParameter = operation.parameters.first(where: { $0.label == "body" }) else {
             return "nil"
         }
-        return "KomaQueryEncoder.bodyDataIfPossible(from: \(bodyParameter.localName), encoder: self.koma.jsonEncoder)"
+        return """
+        KomaRequestBody {
+            try KomaQueryEncoder.bodyData(
+                from: \(bodyParameter.localName),
+                encoder: self.koma.jsonEncoder,
+                optimization: self.koma.jsonOptimization
+            )
+        }
+        """
     }
 
     private static func placeholders(in path: String) -> [String] {

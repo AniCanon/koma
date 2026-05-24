@@ -74,8 +74,8 @@ struct KomaStoreIntegrationTests {
         #expect(ProjectRecord.komaTableName == "projects")
         #expect(ProjectRecord.komaPrimaryKey == "id")
         #expect(ProjectRecord.komaColumns.map(\.name) == ["id", "name", "slug", "deletedAt"])
-        #expect(ProjectRecord._komaSQLiteCreateTableSQL?.contains("CREATE TABLE IF NOT EXISTS") == true)
-        #expect(ProjectRecord._komaSQLiteFastPath)
+        #expect(ProjectRecord.komaGeneratedCreateTableSQL?.contains("CREATE TABLE IF NOT EXISTS") == true)
+        #expect(ProjectRecord.komaUsesSQLiteFastPath)
     }
 
     @Test
@@ -89,7 +89,7 @@ struct KomaStoreIntegrationTests {
             .fetch()
 
         #expect(records == [record])
-        #expect(!FeatureRecord._komaSQLiteFastPath)
+        #expect(!(FeatureRecord.self is any KomaSQLiteFastPathRecord.Type))
     }
 
     @Test
@@ -107,8 +107,8 @@ struct KomaStoreIntegrationTests {
         let records = try await store.query(MacroFeatureRecord.self)
             .fetch()
 
-        #expect(MacroFeatureRecord._komaSQLiteFastPath)
-        #expect(!MacroFeatureRecord._komaJSONFastPath)
+        #expect(MacroFeatureRecord.komaUsesSQLiteFastPath)
+        #expect(!(MacroFeatureRecord.self is any KomaJSONFastPathRecord.Type))
         #expect(records == [record])
     }
 
@@ -140,7 +140,7 @@ struct KomaStoreIntegrationTests {
             .order(by: \.id)
             .fetch()
 
-        #expect(SQLiteFastPathProfileRecord._komaSQLiteFastPath)
+        #expect(SQLiteFastPathProfileRecord.komaUsesSQLiteFastPath)
         #expect(hydrated == records)
     }
 
@@ -180,9 +180,9 @@ struct KomaStoreIntegrationTests {
         ]
         """.utf8)
 
-        let records = try ProjectRecord._komaJSONRecords(from: body)
+        let records = try ProjectRecord.komaJSONRecords(from: body)
 
-        #expect(ProjectRecord._komaJSONFastPath)
+        #expect(ProjectRecord.komaUsesJSONFastPath)
         #expect(records.map(\.id) == ["1", "2"])
         #expect(records[0].name == "Alpha\n🌸")
         #expect(records[1].name == "Quote: \"Koma\"")

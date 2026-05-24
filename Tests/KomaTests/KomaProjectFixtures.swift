@@ -151,6 +151,10 @@ struct ProjectCreateBody: Codable, Equatable {
     var createdAt: Date
 }
 
+struct ProjectBrokenBody: Encodable {
+    var score: Double
+}
+
 @KomaResource(basePath: "projects", record: ProjectRecord.self)
 enum ProjectEncodingResources {
     @KomaRoute(.get("updated", as: [Project].self))
@@ -161,4 +165,7 @@ enum ProjectEncodingResources {
 
     @KomaRoute(.post(as: Project.self))
     case create(body: ProjectCreateBody)
+
+    @KomaRoute(.post("broken", as: Project.self))
+    case broken(body: ProjectBrokenBody)
 }

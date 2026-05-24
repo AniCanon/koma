@@ -3,8 +3,8 @@ import Foundation
 import Koma
 
 extension SQLiteKomaStore {
-    static func fastRow(statement: OpaquePointer, columnCount: Int) -> _KomaSQLiteRow {
-        var values: [_KomaSQLiteValue] = []
+    static func fastRow(statement: OpaquePointer, columnCount: Int) -> KomaSQLiteRow {
+        var values: [KomaSQLiteStorageValue] = []
         values.reserveCapacity(columnCount)
 
         for offset in 0 ..< columnCount {
@@ -30,7 +30,7 @@ extension SQLiteKomaStore {
             }
         }
 
-        return _KomaSQLiteRow(values: values)
+        return KomaSQLiteRow(values: values)
     }
 
     static func rowObject(statement: OpaquePointer, columns: [String]) -> [String: Any] {

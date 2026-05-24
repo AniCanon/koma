@@ -10,7 +10,8 @@ public extension SQLiteKomaStore {
             try ensureSchema(tableName: join.tableName, primaryKey: join.primaryKey, columns: join.columns)
         }
 
-        let usesDirectRecordPath = usesSQLiteFastPath && decoder == nil && Record._komaSQLiteFastPath
+        let fastRecordType = Record.self as? any KomaSQLiteFastPathRecord.Type
+        let usesDirectRecordPath = usesSQLiteFastPath && decoder == nil && fastRecordType != nil
         let columnMetadata = Record.komaColumns
         let columns = usesDirectRecordPath ? [] : Self.columnNames(from: columnMetadata)
         var arguments: [KomaValue] = []
@@ -59,7 +60,11 @@ public extension SQLiteKomaStore {
                 }
                 if usesDirectRecordPath {
                     let row = SQLiteStatementRowReader(statement: statement)
-                    try records.append(Record._komaSQLiteRecord(from: row))
+                    let record = try fastRecordType?.komaSQLiteRecord(from: row) as? Record
+                    guard let record else {
+                        throw SQLiteKomaError.executionFailed("SQLite fast path returned an unexpected record type.")
+                    }
+                    records.append(record)
                 } else if let decoder = self.decoder {
                     let object = Self.rowObject(statement: statement, columns: columns)
                     let data = try JSONSerialization.data(withJSONObject: object)

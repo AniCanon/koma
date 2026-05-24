@@ -9,7 +9,7 @@ Koma is designed to keep app code high level while moving the repetitive work in
 - Entity macros generate table metadata, columns, binders, row readers, and JSON record decoders instead of discovering schema through runtime reflection.
 - SQLite writes bind typed values directly and avoid storing opaque REST payload blobs.
 - SQLite reads use generated record fast paths for supported scalar columns.
-- The optimized JSON path decodes common flat REST responses directly into records.
+- The optimized JSON path decodes common flat REST responses directly into records and encodes supported record-shaped request bodies without going through the general-purpose encoder.
 - Resource fetches persist normalized records first, then reuse the same local query engine for filtering, sorting, limits, and relationships.
 - Relationship `.include(...)` batch-loads related records and avoids N+1 query patterns.
 - The HTTP layer stays close to `URLSession`; plugins compose auth, retry, and logging without hiding the transport.
@@ -45,14 +45,16 @@ Official numbers should quote p50 and p90 from `scripts/benchmark-official.sh`, 
 
 ## JSON
 
-Koma can use an optimized JSON path for simple REST responses that map directly into records. This path is intentionally narrow:
+Koma can use an optimized JSON path for simple REST responses and request bodies that map directly to records. This path is intentionally narrow:
 
 - It supports flat record fields backed by stored columns.
 - It supports `String`, signed integer types, `Bool`, `Float`, `Double`, and default `Date` numeric encoding.
-- It supports arrays, objects, nulls, unknown fields, nested unknown values, and escaped Unicode strings.
+- It supports arrays, objects, nulls, unknown fields, nested unknown values, escaped Unicode strings, and non-finite-number validation.
 - It does not replace `JSONDecoder`, custom `CodingKeys`, custom decoder strategies, nested models, enums, `Data`, polymorphic payloads, or envelope/adapters.
 
-When the JSON path cannot decode a response, Koma falls back to the configured `JSONDecoder`. You can also disable the optimization with:
+When the JSON path cannot decode a response, Koma falls back to the configured `JSONDecoder`. Request body encoding errors are reported before the transport sends a request.
+
+You can disable the optimization with:
 
 ```swift
 let koma = KomaClient(

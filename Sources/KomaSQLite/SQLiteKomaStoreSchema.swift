@@ -10,7 +10,7 @@ extension SQLiteKomaStore {
                     tableName: entity.komaTableName,
                     primaryKey: entity.komaPrimaryKey,
                     columns: entity.komaColumns,
-                    generatedSQL: entity._komaSQLiteCreateTableSQL
+                    generatedSQL: (entity as? any KomaGeneratedSchemaRecord.Type)?.komaGeneratedCreateTableSQL
                 )
             }
             return
@@ -25,7 +25,7 @@ extension SQLiteKomaStore {
             appendCreateTableSQL(
                 tableName: entity.komaTableName,
                 columns: entity.komaColumns,
-                generatedSQL: entity._komaSQLiteCreateTableSQL,
+                generatedSQL: (entity as? any KomaGeneratedSchemaRecord.Type)?.komaGeneratedCreateTableSQL,
                 to: &sql
             )
             tableNames.append(entity.komaTableName)

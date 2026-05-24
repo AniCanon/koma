@@ -2,12 +2,12 @@ import Foundation
 
 /// A forward-only JSON scanner used by macro-expanded record decoders.
 @_documentation(visibility: private)
-public struct _KomaJSONScanner {
+public struct KomaJSONScanner {
     let buffer: UnsafeBufferPointer<UInt8>
     var offset = 0
 
     public mutating func readArray<Element>(
-        _ decode: (inout _KomaJSONScanner) throws -> Element
+        _ decode: (inout KomaJSONScanner) throws -> Element
     ) throws -> [Element] {
         try expect(.leftBracket)
         try skipWhitespace()
@@ -29,7 +29,7 @@ public struct _KomaJSONScanner {
     }
 
     public mutating func readObject(
-        _ consumeValueForKey: (String, inout _KomaJSONScanner) throws -> Void
+        _ consumeValueForKey: (String, inout KomaJSONScanner) throws -> Void
     ) throws {
         try expect(.leftBrace)
         try skipWhitespace()
@@ -68,7 +68,7 @@ public struct _KomaJSONScanner {
             offset += 1
         }
 
-        throw _KomaJSONError.unexpectedEnd
+        throw KomaJSONFastPathError.unexpectedEnd
     }
 
     public mutating func readOptionalString() throws -> String? {
@@ -101,7 +101,7 @@ public struct _KomaJSONScanner {
     ) throws -> Value {
         let value = try readInt64()
         guard let converted = Value(exactly: value) else {
-            throw _KomaJSONError.integerOverflow(String(describing: type))
+            throw KomaJSONFastPathError.integerOverflow(String(describing: type))
         }
         return converted
     }
@@ -120,7 +120,7 @@ public struct _KomaJSONScanner {
         let range = try readNumberRange()
         let literal = String(decoding: buffer[range], as: UTF8.self)
         guard let value = Double(literal) else {
-            throw _KomaJSONError.invalidNumber(offset: range.lowerBound)
+            throw KomaJSONFastPathError.invalidNumber(offset: range.lowerBound)
         }
         return value
     }
@@ -154,7 +154,7 @@ public struct _KomaJSONScanner {
     public mutating func skipValue() throws {
         try skipWhitespace()
         guard let byte = peek() else {
-            throw _KomaJSONError.unexpectedEnd
+            throw KomaJSONFastPathError.unexpectedEnd
         }
 
         switch byte {

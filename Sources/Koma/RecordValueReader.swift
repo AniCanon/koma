@@ -2,10 +2,10 @@ import Foundation
 
 enum KomaRecordValueReader {
     static func value<Record: KomaEntityRecord>(_ column: String, in record: Record) throws -> KomaValue {
-        if Record._komaSQLiteFastPath,
+        if let fastRecord = record as? any KomaSQLiteFastPathRecord,
            let index = Record.komaColumns.firstIndex(where: { $0.name == column })
         {
-            return try value(record._komaSQLiteValues[index], column: column)
+            return try value(fastRecord.komaSQLiteValues[index], column: column)
         }
 
         let data = try JSONEncoder().encode(record)
@@ -16,7 +16,7 @@ enum KomaRecordValueReader {
         return try value(rawValue, column: column)
     }
 
-    private static func value(_ value: _KomaSQLiteValue, column: String) throws -> KomaValue {
+    private static func value(_ value: KomaSQLiteStorageValue, column: String) throws -> KomaValue {
         switch value {
         case let .text(value):
             return .string(value)

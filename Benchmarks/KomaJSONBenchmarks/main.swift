@@ -147,7 +147,7 @@ struct KomaJSONBenchmarkMain {
                     payload: payload.label,
                     iterations: iterations(for: payload)
                 ) {
-                    let records = try BenchmarkProjectRecord._komaJSONRecords(from: payload.body)
+                    let records = try BenchmarkProjectRecord.komaJSONRecords(from: payload.body)
                     blackHole(records.count)
                 },
                 JSONBenchmark(
@@ -177,7 +177,7 @@ struct KomaJSONBenchmarkMain {
                     payload: payload.label,
                     iterations: iterations(for: payload)
                 ) {
-                    let body = try BenchmarkProjectRecord._komaJSONData(records: payload.records)
+                    let body = try BenchmarkProjectRecord.komaJSONData(records: payload.records)
                     blackHole(body.count)
                 }
             ]

@@ -3,7 +3,7 @@ import SwiftSyntax
 extension KomaEntityMacro {
     static func sqliteFastPathMembers(for properties: [EntityProperty]) -> [DeclSyntax] {
         let values = properties
-            .map { "_KomaSQLiteValue(self.\($0.name))" }
+            .map { "KomaSQLiteStorageValue(self.\($0.name))" }
             .joined(separator: ",\n            ")
         let assignments = properties.enumerated()
             .map { index, property in
@@ -13,39 +13,39 @@ extension KomaEntityMacro {
 
         return [
             """
-            public static let _komaSQLiteFastPath = true
+            public static let komaUsesSQLiteFastPath = true
             """,
             """
-            public var _komaSQLiteValues: [_KomaSQLiteValue] {
+            public var komaSQLiteValues: [KomaSQLiteStorageValue] {
                 [
                     \(raw: values)
                 ]
             }
             """,
             """
-            public func _komaSQLiteValues(into values: inout [_KomaSQLiteValue]) {
+            public func komaSQLiteValues(into values: inout [KomaSQLiteStorageValue]) {
                 values.reserveCapacity(\(raw: properties.count))
-                \(raw: properties.map { "values.append(_KomaSQLiteValue(self.\($0.name)))" }.joined(separator: "\n        "))
+                \(raw: properties.map { "values.append(KomaSQLiteStorageValue(self.\($0.name)))" }.joined(separator: "\n        "))
             }
             """,
             """
-            public func _komaSQLiteBind<Binder: _KomaSQLiteValueBinder>(into binder: inout Binder) throws {
+            public func komaSQLiteBind<Binder: KomaSQLiteValueBinder>(into binder: inout Binder) throws {
                 \(raw: properties.map { "try binder.bind(self.\($0.name))" }.joined(separator: "\n        "))
             }
             """,
             """
-            public init<Reader: _KomaSQLiteRowReader>(_komaSQLiteRow row: borrowing Reader) throws {
+            public init<Reader: KomaSQLiteRowReader>(komaSQLiteRow row: borrowing Reader) throws {
                 \(raw: assignments)
             }
             """,
             """
-            public static func _komaSQLiteRecord(from row: _KomaSQLiteRow) throws -> Self {
-                try Self(_komaSQLiteRow: row)
+            public static func komaSQLiteRecord(from row: KomaSQLiteRow) throws -> Self {
+                try Self(komaSQLiteRow: row)
             }
             """,
             """
-            public static func _komaSQLiteRecord<Reader: _KomaSQLiteRowReader>(from reader: borrowing Reader) throws -> Self {
-                try Self(_komaSQLiteRow: reader)
+            public static func komaSQLiteRecord<Reader: KomaSQLiteRowReader>(from reader: borrowing Reader) throws -> Self {
+                try Self(komaSQLiteRow: reader)
             }
             """
         ]
@@ -74,7 +74,7 @@ extension KomaEntityMacro {
                 if $0.isOptional {
                     return "self.\($0.name) = \($0.name)"
                 }
-                return "self.\($0.name) = try _komaJSONRequire(\($0.name), \"\($0.name)\")"
+                return "self.\($0.name) = try komaJSONRequire(\($0.name), \"\($0.name)\")"
             }
             .joined(separator: "\n        ")
         let encodeFields = properties
@@ -83,24 +83,34 @@ extension KomaEntityMacro {
 
         return [
             """
-            public static let _komaJSONFastPath = true
+            public static let komaUsesJSONFastPath = true
             """,
             """
-            public static func _komaJSONRecords(from data: borrowing Data) throws -> [Self] {
-                try _KomaJSONDecoder.decodeArray(from: data) { scanner in
-                    try Self._komaJSONRecord(from: &scanner)
+            public static func komaJSONRecordValues(from data: borrowing Data) throws -> [any KomaEntityRecord] {
+                try komaJSONRecords(from: data)
+            }
+            """,
+            """
+            public static func komaJSONRecordValue(from data: borrowing Data) throws -> any KomaEntityRecord {
+                try komaJSONRecord(from: data)
+            }
+            """,
+            """
+            public static func komaJSONRecords(from data: borrowing Data) throws -> [Self] {
+                try KomaJSONRecordDecoder.decodeArray(from: data) { scanner in
+                    try Self.komaJSONRecord(from: &scanner)
                 }
             }
             """,
             """
-            public static func _komaJSONRecord(from data: borrowing Data) throws -> Self {
-                try _KomaJSONDecoder.decodeObject(from: data) { scanner in
-                    try Self._komaJSONRecord(from: &scanner)
+            public static func komaJSONRecord(from data: borrowing Data) throws -> Self {
+                try KomaJSONRecordDecoder.decodeObject(from: data) { scanner in
+                    try Self.komaJSONRecord(from: &scanner)
                 }
             }
             """,
             """
-            private static func _komaJSONRecord(from scanner: inout _KomaJSONScanner) throws -> Self {
+            private static func komaJSONRecord(from scanner: inout KomaJSONScanner) throws -> Self {
                 \(raw: variables)
 
                 try scanner.readObject { key, scanner in
@@ -120,21 +130,21 @@ extension KomaEntityMacro {
             }
             """,
             """
-            public static func _komaJSONData(records: borrowing [Self]) throws -> Data {
-                try _KomaJSONEncoder.encodeArray(records) { record, writer in
-                    try record._komaJSONWrite(to: &writer)
+            public static func komaJSONData(records: borrowing [Self]) throws -> Data {
+                try KomaJSONRecordEncoder.encodeArray(records) { record, writer in
+                    try record.komaJSONWrite(to: &writer)
                 }
             }
             """,
             """
-            public func _komaJSONData() throws -> Data {
-                try _KomaJSONEncoder.encodeObject(self) { record, writer in
-                    try record._komaJSONWrite(to: &writer)
+            public func komaJSONData() throws -> Data {
+                try KomaJSONRecordEncoder.encodeObject(self) { record, writer in
+                    try record.komaJSONWrite(to: &writer)
                 }
             }
             """,
             """
-            public func _komaJSONWrite(to writer: inout _KomaJSONWriter) throws {
+            public func komaJSONWrite(to writer: inout KomaJSONWriter) throws {
                 writer.beginObject()
                 var isFirst = true
                 \(raw: encodeFields)

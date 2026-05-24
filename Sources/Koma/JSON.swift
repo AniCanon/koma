@@ -5,7 +5,7 @@ import Foundation
 /// This decoder is not a general `JSONDecoder` replacement. It is a narrow,
 /// acceleration path for flat Koma records with supported stored column types.
 @_documentation(visibility: private)
-public enum _KomaJSONError: Error, Equatable, Sendable {
+public enum KomaJSONFastPathError: Error, Equatable, Sendable {
     case emptyInput
     case unexpectedByte(UInt8, offset: Int)
     case unexpectedEnd
@@ -19,20 +19,20 @@ public enum _KomaJSONError: Error, Equatable, Sendable {
 
 /// Entry points used by macro-expanded record code to decode JSON arrays and objects.
 @_documentation(visibility: private)
-public enum _KomaJSONDecoder {
+public enum KomaJSONRecordDecoder {
     public static func decodeArray<Record>(
         from data: borrowing Data,
-        _ decode: (inout _KomaJSONScanner) throws -> Record
+        _ decode: (inout KomaJSONScanner) throws -> Record
     ) throws -> [Record] {
         try data.withUnsafeBytes { rawBuffer in
             guard !rawBuffer.isEmpty,
                   let baseAddress = rawBuffer.bindMemory(to: UInt8.self).baseAddress
             else {
-                throw _KomaJSONError.emptyInput
+                throw KomaJSONFastPathError.emptyInput
             }
 
             let buffer = UnsafeBufferPointer(start: baseAddress, count: rawBuffer.count)
-            var scanner = _KomaJSONScanner(buffer: buffer)
+            var scanner = KomaJSONScanner(buffer: buffer)
             let records = try scanner.readArray(decode)
             try scanner.finish()
             return records
@@ -41,17 +41,17 @@ public enum _KomaJSONDecoder {
 
     public static func decodeObject<Record>(
         from data: borrowing Data,
-        _ decode: (inout _KomaJSONScanner) throws -> Record
+        _ decode: (inout KomaJSONScanner) throws -> Record
     ) throws -> Record {
         try data.withUnsafeBytes { rawBuffer in
             guard !rawBuffer.isEmpty,
                   let baseAddress = rawBuffer.bindMemory(to: UInt8.self).baseAddress
             else {
-                throw _KomaJSONError.emptyInput
+                throw KomaJSONFastPathError.emptyInput
             }
 
             let buffer = UnsafeBufferPointer(start: baseAddress, count: rawBuffer.count)
-            var scanner = _KomaJSONScanner(buffer: buffer)
+            var scanner = KomaJSONScanner(buffer: buffer)
             let record = try decode(&scanner)
             try scanner.finish()
             return record
@@ -61,12 +61,12 @@ public enum _KomaJSONDecoder {
 
 /// Entry points used by macro-expanded record code to encode JSON arrays and objects.
 @_documentation(visibility: private)
-public enum _KomaJSONEncoder {
+public enum KomaJSONRecordEncoder {
     public static func encodeArray<Record>(
         _ records: borrowing [Record],
-        _ encode: (Record, inout _KomaJSONWriter) throws -> Void
+        _ encode: (Record, inout KomaJSONWriter) throws -> Void
     ) throws -> Data {
-        var writer = _KomaJSONWriter()
+        var writer = KomaJSONWriter()
         writer.beginArray()
         var isFirst = true
         for index in records.indices {
@@ -79,18 +79,18 @@ public enum _KomaJSONEncoder {
 
     public static func encodeObject<Record>(
         _ record: borrowing Record,
-        _ encode: (Record, inout _KomaJSONWriter) throws -> Void
+        _ encode: (Record, inout KomaJSONWriter) throws -> Void
     ) throws -> Data {
-        var writer = _KomaJSONWriter()
+        var writer = KomaJSONWriter()
         try encode(record, &writer)
         return writer.data()
     }
 }
 
 @_documentation(visibility: private)
-public func _komaJSONRequire<Value>(_ value: Value?, _ field: StaticString) throws -> Value {
+public func komaJSONRequire<Value>(_ value: Value?, _ field: StaticString) throws -> Value {
     guard let value else {
-        throw _KomaJSONError.missingRequiredField(String(describing: field))
+        throw KomaJSONFastPathError.missingRequiredField(String(describing: field))
     }
     return value
 }

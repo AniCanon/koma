@@ -83,7 +83,7 @@ public actor SQLiteKomaStore: KomaStore {
             tableName: Record.komaTableName,
             primaryKey: Record.komaPrimaryKey,
             columns: Record.komaColumns,
-            generatedSQL: Record._komaSQLiteCreateTableSQL
+            generatedSQL: (Record.self as? any KomaGeneratedSchemaRecord.Type)?.komaGeneratedCreateTableSQL
         )
     }
 

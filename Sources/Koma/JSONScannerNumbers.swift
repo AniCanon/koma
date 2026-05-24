@@ -1,4 +1,4 @@
-extension _KomaJSONScanner {
+extension KomaJSONScanner {
     mutating func readInt64() throws -> Int64 {
         try skipWhitespace()
         let start = offset
@@ -17,10 +17,10 @@ extension _KomaJSONScanner {
         }
 
         guard readDigit else {
-            throw _KomaJSONError.invalidNumber(offset: start)
+            throw KomaJSONFastPathError.invalidNumber(offset: start)
         }
         guard !isNumberContinuation(peek()) else {
-            throw _KomaJSONError.invalidNumber(offset: start)
+            throw KomaJSONFastPathError.invalidNumber(offset: start)
         }
         return value * sign
     }
@@ -55,12 +55,12 @@ extension _KomaJSONScanner {
                 offset += 1
             }
             guard readExponentDigit else {
-                throw _KomaJSONError.invalidNumber(offset: start)
+                throw KomaJSONFastPathError.invalidNumber(offset: start)
             }
         }
 
         guard readDigit else {
-            throw _KomaJSONError.invalidNumber(offset: start)
+            throw KomaJSONFastPathError.invalidNumber(offset: start)
         }
         return start ..< offset
     }

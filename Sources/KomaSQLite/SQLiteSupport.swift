@@ -23,7 +23,7 @@ struct SQLiteConnection: @unchecked Sendable {
     var rawValue: OpaquePointer?
 }
 
-struct SQLiteStatementBinder: _KomaSQLiteValueBinder {
+struct SQLiteStatementBinder: KomaSQLiteValueBinder {
     let statement: OpaquePointer
     var index: Int32 = 1
 

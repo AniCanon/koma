@@ -1,7 +1,7 @@
 import Foundation
 
 @_documentation(visibility: private)
-public protocol _KomaSQLiteRowReader: Sendable {
+public protocol KomaSQLiteRowReader: Sendable {
     func _string(at index: Int) throws -> String
     func _optionalString(at index: Int) throws -> String?
     func _bool(at index: Int) throws -> Bool
@@ -17,16 +17,16 @@ public protocol _KomaSQLiteRowReader: Sendable {
 }
 
 @_documentation(visibility: private)
-public struct _KomaSQLiteRow: _KomaSQLiteRowReader, Sendable {
-    private let values: [_KomaSQLiteValue]
+public struct KomaSQLiteRow: KomaSQLiteRowReader, Sendable {
+    private let values: [KomaSQLiteStorageValue]
 
-    public init(values: [_KomaSQLiteValue]) {
+    public init(values: [KomaSQLiteStorageValue]) {
         self.values = values
     }
 
     public func _string(at index: Int) throws -> String {
         guard case let .text(value) = try value(at: index) else {
-            throw _KomaSQLiteFastPathError.typeMismatch(index: index, expected: "String")
+            throw KomaSQLiteFastPathError.typeMismatch(index: index, expected: "String")
         }
         return value
     }
@@ -37,14 +37,14 @@ public struct _KomaSQLiteRow: _KomaSQLiteRowReader, Sendable {
             return nil
         }
         guard case let .text(text) = value else {
-            throw _KomaSQLiteFastPathError.typeMismatch(index: index, expected: "String?")
+            throw KomaSQLiteFastPathError.typeMismatch(index: index, expected: "String?")
         }
         return text
     }
 
     public func _bool(at index: Int) throws -> Bool {
         guard case let .integer(value) = try value(at: index) else {
-            throw _KomaSQLiteFastPathError.typeMismatch(index: index, expected: "Bool")
+            throw KomaSQLiteFastPathError.typeMismatch(index: index, expected: "Bool")
         }
         return value != 0
     }
@@ -55,7 +55,7 @@ public struct _KomaSQLiteRow: _KomaSQLiteRowReader, Sendable {
             return nil
         }
         guard case let .integer(integer) = value else {
-            throw _KomaSQLiteFastPathError.typeMismatch(index: index, expected: "Bool?")
+            throw KomaSQLiteFastPathError.typeMismatch(index: index, expected: "Bool?")
         }
         return integer != 0
     }
@@ -67,7 +67,7 @@ public struct _KomaSQLiteRow: _KomaSQLiteRowReader, Sendable {
         guard case let .integer(value) = try value(at: index),
               let converted = Value(exactly: value)
         else {
-            throw _KomaSQLiteFastPathError.typeMismatch(index: index, expected: "\(type)")
+            throw KomaSQLiteFastPathError.typeMismatch(index: index, expected: "\(type)")
         }
         return converted
     }
@@ -83,7 +83,7 @@ public struct _KomaSQLiteRow: _KomaSQLiteRowReader, Sendable {
         guard case let .integer(integer) = value,
               let converted = Value(exactly: integer)
         else {
-            throw _KomaSQLiteFastPathError.typeMismatch(index: index, expected: "\(type)?")
+            throw KomaSQLiteFastPathError.typeMismatch(index: index, expected: "\(type)?")
         }
         return converted
     }
@@ -98,7 +98,7 @@ public struct _KomaSQLiteRow: _KomaSQLiteRowReader, Sendable {
         case let .integer(value):
             return Value(value)
         default:
-            throw _KomaSQLiteFastPathError.typeMismatch(index: index, expected: "\(type)")
+            throw KomaSQLiteFastPathError.typeMismatch(index: index, expected: "\(type)")
         }
     }
 
@@ -116,7 +116,7 @@ public struct _KomaSQLiteRow: _KomaSQLiteRowReader, Sendable {
         case let .integer(integer):
             return Value(integer)
         default:
-            throw _KomaSQLiteFastPathError.typeMismatch(index: index, expected: "\(type)?")
+            throw KomaSQLiteFastPathError.typeMismatch(index: index, expected: "\(type)?")
         }
     }
 
@@ -130,7 +130,7 @@ public struct _KomaSQLiteRow: _KomaSQLiteRowReader, Sendable {
 
     public func _data(at index: Int) throws -> Data {
         guard case let .blob(value) = try value(at: index) else {
-            throw _KomaSQLiteFastPathError.typeMismatch(index: index, expected: "Data")
+            throw KomaSQLiteFastPathError.typeMismatch(index: index, expected: "Data")
         }
         return value
     }
@@ -141,14 +141,14 @@ public struct _KomaSQLiteRow: _KomaSQLiteRowReader, Sendable {
             return nil
         }
         guard case let .blob(data) = value else {
-            throw _KomaSQLiteFastPathError.typeMismatch(index: index, expected: "Data?")
+            throw KomaSQLiteFastPathError.typeMismatch(index: index, expected: "Data?")
         }
         return data
     }
 
-    private func value(at index: Int) throws -> _KomaSQLiteValue {
+    private func value(at index: Int) throws -> KomaSQLiteStorageValue {
         guard values.indices.contains(index) else {
-            throw _KomaSQLiteFastPathError.missingColumn(index)
+            throw KomaSQLiteFastPathError.missingColumn(index)
         }
         return values[index]
     }

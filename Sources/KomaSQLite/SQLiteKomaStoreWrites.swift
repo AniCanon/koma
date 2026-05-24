@@ -21,9 +21,11 @@ public extension SQLiteKomaStore {
         do {
             try withStatement(sql) { statement in
                 for record in records {
-                    if self.usesSQLiteFastPath, Record._komaSQLiteFastPath {
+                    if self.usesSQLiteFastPath,
+                       let fastRecord = record as? any KomaSQLiteFastPathRecord
+                    {
                         var binder = SQLiteStatementBinder(statement: statement)
-                        try record._komaSQLiteBind(into: &binder)
+                        try fastRecord.komaSQLiteBind(into: &binder)
                         guard binder.boundCount == columns.count else {
                             throw SQLiteKomaError.executionFailed("SQLite value count mismatch.")
                         }

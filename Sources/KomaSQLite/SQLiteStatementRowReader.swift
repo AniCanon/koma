@@ -2,14 +2,14 @@ import CKomaSQLite
 import Foundation
 import Koma
 
-struct SQLiteStatementRowReader: _KomaSQLiteRowReader, @unchecked Sendable {
+struct SQLiteStatementRowReader: KomaSQLiteRowReader, @unchecked Sendable {
     let statement: OpaquePointer
 
     func _string(at index: Int) throws -> String {
         guard sqlite3_column_type(statement, Int32(index)) == SQLITE_TEXT,
               let bytes = sqlite3_column_text(statement, Int32(index))
         else {
-            throw _KomaSQLiteFastPathError.typeMismatch(index: index, expected: "String")
+            throw KomaSQLiteFastPathError.typeMismatch(index: index, expected: "String")
         }
         return String(cString: bytes)
     }
@@ -23,7 +23,7 @@ struct SQLiteStatementRowReader: _KomaSQLiteRowReader, @unchecked Sendable {
 
     func _bool(at index: Int) throws -> Bool {
         guard sqlite3_column_type(statement, Int32(index)) == SQLITE_INTEGER else {
-            throw _KomaSQLiteFastPathError.typeMismatch(index: index, expected: "Bool")
+            throw KomaSQLiteFastPathError.typeMismatch(index: index, expected: "Bool")
         }
         return sqlite3_column_int64(statement, Int32(index)) != 0
     }
@@ -42,7 +42,7 @@ struct SQLiteStatementRowReader: _KomaSQLiteRowReader, @unchecked Sendable {
         guard sqlite3_column_type(statement, Int32(index)) == SQLITE_INTEGER,
               let converted = Value(exactly: sqlite3_column_int64(statement, Int32(index)))
         else {
-            throw _KomaSQLiteFastPathError.typeMismatch(index: index, expected: "\(type)")
+            throw KomaSQLiteFastPathError.typeMismatch(index: index, expected: "\(type)")
         }
         return converted
     }
@@ -67,7 +67,7 @@ struct SQLiteStatementRowReader: _KomaSQLiteRowReader, @unchecked Sendable {
         case SQLITE_INTEGER:
             return Value(sqlite3_column_int64(statement, Int32(index)))
         default:
-            throw _KomaSQLiteFastPathError.typeMismatch(index: index, expected: "\(type)")
+            throw KomaSQLiteFastPathError.typeMismatch(index: index, expected: "\(type)")
         }
     }
 
@@ -91,7 +91,7 @@ struct SQLiteStatementRowReader: _KomaSQLiteRowReader, @unchecked Sendable {
 
     func _data(at index: Int) throws -> Data {
         guard sqlite3_column_type(statement, Int32(index)) == SQLITE_BLOB else {
-            throw _KomaSQLiteFastPathError.typeMismatch(index: index, expected: "Data")
+            throw KomaSQLiteFastPathError.typeMismatch(index: index, expected: "Data")
         }
         let count = Int(sqlite3_column_bytes(statement, Int32(index)))
         guard let bytes = sqlite3_column_blob(statement, Int32(index)), count > 0 else {

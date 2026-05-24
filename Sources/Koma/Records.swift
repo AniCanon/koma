@@ -22,91 +22,72 @@ public protocol KomaEntityRecord: Codable, Sendable {
     static var komaPrimaryKey: String { get }
     static var komaColumns: [KomaColumnMetadata] { get }
     static var columns: Columns { get }
-    static var _komaSQLiteCreateTableSQL: String? { get }
-    static var _komaSQLiteFastPath: Bool { get }
-    var _komaSQLiteValues: [_KomaSQLiteValue] { get }
-    static var _komaJSONFastPath: Bool { get }
-
-    func _komaSQLiteValues(into values: inout [_KomaSQLiteValue])
-    func _komaSQLiteBind(into binder: inout some _KomaSQLiteValueBinder) throws
-    static func _komaSQLiteRecord(from row: _KomaSQLiteRow) throws -> Self
-    static func _komaSQLiteRecord(from reader: borrowing some _KomaSQLiteRowReader) throws -> Self
-    static func _komaJSONRecords(from data: borrowing Data) throws -> [Self]
-    static func _komaJSONRecord(from data: borrowing Data) throws -> Self
-    static func _komaJSONData(records: borrowing [Self]) throws -> Data
-    func _komaJSONData() throws -> Data
-    func _komaJSONWrite(to writer: inout _KomaJSONWriter) throws
 }
 
-public extension KomaEntityRecord {
-    static var _komaSQLiteCreateTableSQL: String? {
-        nil
+@_documentation(visibility: private)
+public protocol KomaGeneratedSchemaRecord: KomaEntityRecord {
+    static var komaGeneratedCreateTableSQL: String? { get }
+}
+
+@_documentation(visibility: private)
+public protocol KomaSQLiteFastPathRecord: KomaGeneratedSchemaRecord {
+    static var komaUsesSQLiteFastPath: Bool { get }
+    var komaSQLiteValues: [KomaSQLiteStorageValue] { get }
+
+    func komaSQLiteValues(into values: inout [KomaSQLiteStorageValue])
+    func komaSQLiteBind(into binder: inout some KomaSQLiteValueBinder) throws
+    static func komaSQLiteRecord(from row: KomaSQLiteRow) throws -> Self
+    static func komaSQLiteRecord(from reader: borrowing some KomaSQLiteRowReader) throws -> Self
+}
+
+@_documentation(visibility: private)
+public protocol KomaJSONFastPathRecord: KomaEntityRecord {
+    static var komaUsesJSONFastPath: Bool { get }
+
+    static func komaJSONRecordValues(from data: borrowing Data) throws -> [any KomaEntityRecord]
+    static func komaJSONRecordValue(from data: borrowing Data) throws -> any KomaEntityRecord
+    static func komaJSONRecords(from data: borrowing Data) throws -> [Self]
+    static func komaJSONRecord(from data: borrowing Data) throws -> Self
+    static func komaJSONData(records: borrowing [Self]) throws -> Data
+    func komaJSONData() throws -> Data
+    func komaJSONWrite(to writer: inout KomaJSONWriter) throws
+}
+
+public extension KomaSQLiteFastPathRecord {
+    static var komaUsesSQLiteFastPath: Bool {
+        true
     }
 
-    static var _komaSQLiteFastPath: Bool {
-        false
-    }
-
-    var _komaSQLiteValues: [_KomaSQLiteValue] {
-        []
-    }
-
-    static var _komaJSONFastPath: Bool {
-        false
-    }
-
-    func _komaSQLiteValues(into values: inout [_KomaSQLiteValue]) {
-        values.append(contentsOf: _komaSQLiteValues)
-    }
-
-    func _komaSQLiteBind(into binder: inout some _KomaSQLiteValueBinder) throws {
-        var values: [_KomaSQLiteValue] = []
-        _komaSQLiteValues(into: &values)
+    func komaSQLiteBind(into binder: inout some KomaSQLiteValueBinder) throws {
+        var values: [KomaSQLiteStorageValue] = []
+        komaSQLiteValues(into: &values)
         for value in values {
             try binder.bind(value)
         }
     }
 
-    static func _komaSQLiteRecord(from row: _KomaSQLiteRow) throws -> Self {
-        throw _KomaSQLiteFastPathError.unavailable
-    }
-
-    static func _komaSQLiteRecord(from reader: borrowing some _KomaSQLiteRowReader) throws -> Self {
-        var values: [_KomaSQLiteValue] = []
+    static func komaSQLiteRecord(from reader: borrowing some KomaSQLiteRowReader) throws -> Self {
+        var values: [KomaSQLiteStorageValue] = []
         values.reserveCapacity(Self.komaColumns.count)
         for (index, column) in Self.komaColumns.enumerated() {
             switch column.storage {
             case .text:
-                try values.append(reader._optionalString(at: index).map(_KomaSQLiteValue.text) ?? .null)
+                try values.append(reader._optionalString(at: index).map(KomaSQLiteStorageValue.text) ?? .null)
             case .integer:
-                try values.append(reader._optionalInteger(at: index, as: Int64.self).map(_KomaSQLiteValue.integer) ?? .null)
+                try values.append(reader._optionalInteger(at: index, as: Int64.self).map(KomaSQLiteStorageValue.integer) ?? .null)
             case .real:
-                try values.append(reader._optionalReal(at: index, as: Double.self).map(_KomaSQLiteValue.real) ?? .null)
+                try values.append(reader._optionalReal(at: index, as: Double.self).map(KomaSQLiteStorageValue.real) ?? .null)
             case .blob:
-                try values.append(reader._optionalData(at: index).map(_KomaSQLiteValue.blob) ?? .null)
+                try values.append(reader._optionalData(at: index).map(KomaSQLiteStorageValue.blob) ?? .null)
             }
         }
-        return try Self._komaSQLiteRecord(from: _KomaSQLiteRow(values: values))
+        return try Self.komaSQLiteRecord(from: KomaSQLiteRow(values: values))
     }
+}
 
-    static func _komaJSONRecords(from data: borrowing Data) throws -> [Self] {
-        throw _KomaJSONError.unavailable
-    }
-
-    static func _komaJSONRecord(from data: borrowing Data) throws -> Self {
-        throw _KomaJSONError.unavailable
-    }
-
-    static func _komaJSONData(records: borrowing [Self]) throws -> Data {
-        throw _KomaJSONError.unavailable
-    }
-
-    func _komaJSONData() throws -> Data {
-        throw _KomaJSONError.unavailable
-    }
-
-    func _komaJSONWrite(to writer: inout _KomaJSONWriter) throws {
-        throw _KomaJSONError.unavailable
+public extension KomaJSONFastPathRecord {
+    static var komaUsesJSONFastPath: Bool {
+        true
     }
 }
 

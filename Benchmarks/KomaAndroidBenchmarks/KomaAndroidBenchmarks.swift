@@ -46,7 +46,7 @@ private func makeAndroidJSONBenchmarks(_ fixtures: AndroidBenchmarkFixtures) -> 
             AndroidBlackHole.consume(projects.count)
         },
         AndroidBenchmark(name: "android.koma.json.records.decode.1k", iterations: 40) {
-            let records = try BenchmarkProjectRecord._komaJSONRecords(from: fixtures.smallBody)
+            let records = try BenchmarkProjectRecord.komaJSONRecords(from: fixtures.smallBody)
             AndroidBlackHole.consume(records.count)
         },
         AndroidBenchmark(name: "android.foundation.jsondecoder.decode.10k", iterations: 20) {
@@ -58,7 +58,7 @@ private func makeAndroidJSONBenchmarks(_ fixtures: AndroidBenchmarkFixtures) -> 
             AndroidBlackHole.consume(projects.count)
         },
         AndroidBenchmark(name: "android.koma.json.records.decode.10k", iterations: 20) {
-            let records = try BenchmarkProjectRecord._komaJSONRecords(from: fixtures.largeBody)
+            let records = try BenchmarkProjectRecord.komaJSONRecords(from: fixtures.largeBody)
             AndroidBlackHole.consume(records.count)
         },
         AndroidBenchmark(name: "android.foundation.jsonencoder.encode.1k", iterations: 40) {
@@ -70,7 +70,7 @@ private func makeAndroidJSONBenchmarks(_ fixtures: AndroidBenchmarkFixtures) -> 
             AndroidBlackHole.consume(body.count)
         },
         AndroidBenchmark(name: "android.koma.json.records.encode.1k", iterations: 40) {
-            let body = try BenchmarkProjectRecord._komaJSONData(records: fixtures.smallRecords)
+            let body = try BenchmarkProjectRecord.komaJSONData(records: fixtures.smallRecords)
             AndroidBlackHole.consume(body.count)
         },
         AndroidBenchmark(name: "android.foundation.jsonencoder.encode.10k", iterations: 20) {
@@ -82,7 +82,7 @@ private func makeAndroidJSONBenchmarks(_ fixtures: AndroidBenchmarkFixtures) -> 
             AndroidBlackHole.consume(body.count)
         },
         AndroidBenchmark(name: "android.koma.json.records.encode.10k", iterations: 20) {
-            let body = try BenchmarkProjectRecord._komaJSONData(records: fixtures.largeRecords)
+            let body = try BenchmarkProjectRecord.komaJSONData(records: fixtures.largeRecords)
             AndroidBlackHole.consume(body.count)
         }
     ]

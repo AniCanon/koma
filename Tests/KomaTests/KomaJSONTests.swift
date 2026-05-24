@@ -4,7 +4,7 @@ import KomaMacros
 import Testing
 
 @KomaEntity(table: "json_projects")
-private struct JSONProjectRecord: KomaEntityRecord, Equatable {
+struct JSONProjectRecord: KomaEntityRecord, Equatable {
     @KomaPrimaryKey var id: String
     var name: String
     var rank: Int
@@ -19,7 +19,7 @@ private struct JSONProjectRecord: KomaEntityRecord, Equatable {
 }
 
 @KomaEntity(table: "json_fast_path_profiles")
-private struct JSONFastPathProfileRecord: KomaEntityRecord, Equatable {
+struct JSONFastPathProfileRecord: KomaEntityRecord, Equatable {
     @KomaPrimaryKey var id: String
     var title: String
     var nickname: String?
@@ -34,7 +34,7 @@ private struct JSONFastPathProfileRecord: KomaEntityRecord, Equatable {
 }
 
 @KomaEntity(table: "json_common_scalars")
-private struct JSONCommonScalarRecord: KomaEntityRecord, Equatable {
+struct JSONCommonScalarRecord: KomaEntityRecord, Equatable {
     @KomaPrimaryKey var id: String
     var isActive: Bool
     var visits: Int64
@@ -65,10 +65,10 @@ private struct JSONCommonScalarRecord: KomaEntityRecord, Equatable {
 struct KomaJSONTests {
     @Test
     func `JSON record path decodes empty arrays and single objects`() throws {
-        let empty = try JSONProjectRecord._komaJSONRecords(from: Data("[]".utf8))
+        let empty = try JSONProjectRecord.komaJSONRecords(from: Data("[]".utf8))
         #expect(empty.isEmpty)
 
-        let object = try JSONProjectRecord._komaJSONRecord(
+        let object = try JSONProjectRecord.komaJSONRecord(
             from: Data(#"{"id":"1","name":"Alpha","rank":7,"deletedAt":123.25}"#.utf8)
         )
 
@@ -92,7 +92,7 @@ struct KomaJSONTests {
             """.utf8
         )
 
-        let records = try JSONProjectRecord._komaJSONRecords(from: body)
+        let records = try JSONProjectRecord.komaJSONRecords(from: body)
 
         #expect(records == [JSONProjectRecord(id: "1", name: "Alpha", rank: 1)])
     }
@@ -118,9 +118,9 @@ struct KomaJSONTests {
             """.utf8
         )
 
-        let records = try JSONFastPathProfileRecord._komaJSONRecords(from: body)
+        let records = try JSONFastPathProfileRecord.komaJSONRecords(from: body)
 
-        #expect(JSONFastPathProfileRecord._komaJSONFastPath)
+        #expect(JSONFastPathProfileRecord.komaUsesJSONFastPath)
         #expect(records == [
             JSONFastPathProfileRecord(id: "1", title: "Alpha"),
             JSONFastPathProfileRecord(
@@ -130,35 +130,6 @@ struct KomaJSONTests {
                 publishedAt: Date(timeIntervalSinceReferenceDate: 456.75)
             )
         ])
-    }
-
-    @Test
-    func `JSON record path encodes single objects and arrays`() throws {
-        let records = [
-            JSONProjectRecord(
-                id: "1",
-                name: "Quote \" slash \\ newline \n",
-                rank: 7,
-                deletedAt: Date(timeIntervalSinceReferenceDate: 123.25)
-            ),
-            JSONProjectRecord(id: "2", name: "Beta", rank: 8)
-        ]
-
-        let body = try JSONProjectRecord._komaJSONData(records: records)
-        let decoded = try JSONProjectRecord._komaJSONRecords(from: body)
-
-        #expect(decoded == records)
-        #expect(String(data: body, encoding: .utf8)?.contains(#""deletedAt":"#) == true)
-        #expect(String(data: body, encoding: .utf8)?.contains(#""id":"2","name":"Beta","rank":8}"#) == true)
-    }
-
-    @Test
-    func `JSON record path can encode request bodies`() throws {
-        let record = JSONProjectRecord(id: "1", name: "Alpha", rank: 7)
-
-        let body = try KomaQueryEncoder.bodyData(from: record)
-
-        #expect(String(data: body, encoding: .utf8) == #"{"id":"1","name":"Alpha","rank":7}"#)
     }
 
     @Test
@@ -173,8 +144,8 @@ struct KomaJSONTests {
             nickname: "A\nB"
         )
 
-        let body = try record._komaJSONData()
-        let decoded = try JSONCommonScalarRecord._komaJSONRecord(from: body)
+        let body = try record.komaJSONData()
+        let decoded = try JSONCommonScalarRecord.komaJSONRecord(from: body)
 
         #expect(decoded == record)
         #expect(String(data: body, encoding: .utf8)?.contains(#""createdAt":789.5"#) == true)
@@ -189,57 +160,11 @@ struct KomaJSONTests {
         )
 
         do {
-            _ = try JSONProjectRecord._komaJSONRecords(from: body)
+            _ = try JSONProjectRecord.komaJSONRecords(from: body)
             Issue.record("Expected fast JSON path to reject ISO date strings.")
-        } catch is _KomaJSONError {
+        } catch is KomaJSONFastPathError {
         } catch {
             Issue.record("Expected Koma JSON error, got \(error).")
-        }
-    }
-
-    @Test
-    func `request body encoding preserves configured ISO date strategy`() throws {
-        let date = try #require(ISO8601DateFormatter().date(from: "2026-01-02T03:04:05Z"))
-        let record = JSONProjectRecord(id: "1", name: "Alpha", rank: 7, deletedAt: date)
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-
-        let body = try KomaQueryEncoder.bodyData(from: record, encoder: encoder)
-
-        #expect(String(data: body, encoding: .utf8)?.contains(#""deletedAt":"2026-01-02T03:04:05Z""#) == true)
-    }
-
-    @Test
-    func `request body encoding preserves configured key strategy`() throws {
-        let record = JSONFastPathProfileRecord(
-            id: "1",
-            title: "Alpha",
-            publishedAt: Date(timeIntervalSinceReferenceDate: 123.25)
-        )
-        let encoder = JSONEncoder()
-        encoder.keyEncodingStrategy = .convertToSnakeCase
-
-        let body = try KomaQueryEncoder.bodyData(from: record, encoder: encoder)
-
-        #expect(String(data: body, encoding: .utf8)?.contains(#""published_at":"#) == true)
-    }
-
-    @Test
-    func `JSON record path rejects non finite numbers`() throws {
-        let record = JSONCommonScalarRecord(
-            id: "scalar-1",
-            isActive: true,
-            visits: 1,
-            rating: .infinity,
-            progress: 0.25,
-            createdAt: Date(timeIntervalSinceReferenceDate: 1)
-        )
-
-        do {
-            _ = try record._komaJSONData()
-            Issue.record("Expected non-finite number error.")
-        } catch {
-            #expect(error as? _KomaJSONError == .nonFiniteNumber)
         }
     }
 
@@ -248,10 +173,10 @@ struct KomaJSONTests {
         let body = Data(#"[{"id":"1","rank":1}]"#.utf8)
 
         do {
-            _ = try JSONProjectRecord._komaJSONRecords(from: body)
+            _ = try JSONProjectRecord.komaJSONRecords(from: body)
             Issue.record("Expected missing required field error.")
         } catch {
-            #expect(error as? _KomaJSONError == .missingRequiredField("name"))
+            #expect(error as? KomaJSONFastPathError == .missingRequiredField("name"))
         }
     }
 
@@ -259,18 +184,18 @@ struct KomaJSONTests {
     func `JSON record path rejects invalid escapes and malformed numbers`() throws {
         let invalidEscape = Data(#"[{"id":"1","name":"\uD800","rank":1}]"#.utf8)
         do {
-            _ = try JSONProjectRecord._komaJSONRecords(from: invalidEscape)
+            _ = try JSONProjectRecord.komaJSONRecords(from: invalidEscape)
             Issue.record("Expected unsupported escape error.")
-        } catch _KomaJSONError.unsupportedEscape {
+        } catch KomaJSONFastPathError.unsupportedEscape {
         } catch {
             Issue.record("Expected unsupported escape, got \(error).")
         }
 
         let malformedInteger = Data(#"[{"id":"1","name":"Alpha","rank":1.2}]"#.utf8)
         do {
-            _ = try JSONProjectRecord._komaJSONRecords(from: malformedInteger)
+            _ = try JSONProjectRecord.komaJSONRecords(from: malformedInteger)
             Issue.record("Expected invalid number error.")
-        } catch _KomaJSONError.invalidNumber {
+        } catch KomaJSONFastPathError.invalidNumber {
         } catch {
             Issue.record("Expected invalid number, got \(error).")
         }

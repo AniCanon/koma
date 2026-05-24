@@ -2,7 +2,7 @@ import Foundation
 
 /// A small JSON writer used by macro-expanded Koma record encoders.
 @_documentation(visibility: private)
-public struct _KomaJSONWriter {
+public struct KomaJSONWriter {
     private var bytes: [UInt8]
 
     public init(capacity: Int = 256) {
@@ -95,7 +95,7 @@ public struct _KomaJSONWriter {
 
     public mutating func writeField(_ key: StaticString, _ value: Double, isFirst: inout Bool) throws {
         guard value.isFinite else {
-            throw _KomaJSONError.nonFiniteNumber
+            throw KomaJSONFastPathError.nonFiniteNumber
         }
         writeKey(key, isFirst: &isFirst)
         writeRaw(String(value))

@@ -1,7 +1,7 @@
 import Foundation
 
 @_documentation(visibility: private)
-public enum _KomaSQLiteValue: Equatable, Sendable {
+public enum KomaSQLiteStorageValue: Equatable, Sendable {
     case null
     case text(String)
     case integer(Int64)
@@ -10,7 +10,7 @@ public enum _KomaSQLiteValue: Equatable, Sendable {
 }
 
 @_documentation(visibility: private)
-public extension _KomaSQLiteValue {
+public extension KomaSQLiteStorageValue {
     init(_ value: String) {
         self = .text(value)
     }

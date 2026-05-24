@@ -1,6 +1,6 @@
 import Foundation
 
-extension _KomaJSONScanner {
+extension KomaJSONScanner {
     mutating func readEscapedString(start: Int) throws -> String {
         var bytes: [UInt8] = []
         bytes.reserveCapacity(32)
@@ -15,7 +15,7 @@ extension _KomaJSONScanner {
             if byte == JSONByte.backslash.rawValue {
                 offset += 1
                 guard let escaped = peek() else {
-                    throw _KomaJSONError.unexpectedEnd
+                    throw KomaJSONFastPathError.unexpectedEnd
                 }
                 offset += 1
                 switch escaped {
@@ -35,7 +35,7 @@ extension _KomaJSONScanner {
                     let scalar = try readUnicodeEscape()
                     bytes.append(contentsOf: String(scalar).utf8)
                 default:
-                    throw _KomaJSONError.unsupportedEscape(offset: offset - 1)
+                    throw KomaJSONFastPathError.unsupportedEscape(offset: offset - 1)
                 }
                 continue
             }
@@ -43,38 +43,38 @@ extension _KomaJSONScanner {
             offset += 1
         }
 
-        throw _KomaJSONError.unexpectedEnd
+        throw KomaJSONFastPathError.unexpectedEnd
     }
 
     mutating func readUnicodeEscape() throws -> UnicodeScalar {
         let first = try readHexValue()
         guard 0xD800 ... 0xDBFF ~= first else {
             guard let scalar = UnicodeScalar(first) else {
-                throw _KomaJSONError.unsupportedEscape(offset: offset - 4)
+                throw KomaJSONFastPathError.unsupportedEscape(offset: offset - 4)
             }
             return scalar
         }
 
         guard consumeIf(.backslash), consumeIf(.u) else {
-            throw _KomaJSONError.unsupportedEscape(offset: offset)
+            throw KomaJSONFastPathError.unsupportedEscape(offset: offset)
         }
         let second = try readHexValue()
         guard 0xDC00 ... 0xDFFF ~= second else {
-            throw _KomaJSONError.unsupportedEscape(offset: offset)
+            throw KomaJSONFastPathError.unsupportedEscape(offset: offset)
         }
 
         let high = first - 0xD800
         let low = second - 0xDC00
         let combined = 0x10000 + ((high << 10) | low)
         guard let scalar = UnicodeScalar(combined) else {
-            throw _KomaJSONError.unsupportedEscape(offset: offset)
+            throw KomaJSONFastPathError.unsupportedEscape(offset: offset)
         }
         return scalar
     }
 
     mutating func readHexValue() throws -> UInt32 {
         guard offset + 4 <= buffer.count else {
-            throw _KomaJSONError.unexpectedEnd
+            throw KomaJSONFastPathError.unexpectedEnd
         }
 
         var value: UInt32 = 0
@@ -96,7 +96,7 @@ extension _KomaJSONScanner {
         case 97 ... 102:
             return byte - 87
         default:
-            throw _KomaJSONError.unsupportedEscape(offset: offset)
+            throw KomaJSONFastPathError.unsupportedEscape(offset: offset)
         }
     }
 }

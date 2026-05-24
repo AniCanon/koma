@@ -16,7 +16,11 @@ public enum BenchmarkFixtures {
     }
 
     public static func responseBody(projects: [BenchmarkProject]) -> Data {
-        try! JSONEncoder().encode(projects)
+        do {
+            return try JSONEncoder().encode(projects)
+        } catch {
+            preconditionFailure("Failed to encode benchmark REST fixture: \(error)")
+        }
     }
 
     public static func characters(for projects: [BenchmarkProject]) -> [BenchmarkCharacter] {
@@ -59,7 +63,11 @@ public enum BenchmarkFixtures {
                 "projects": projectObjects
             ]
         ]
-        return try! JSONSerialization.data(withJSONObject: response)
+        do {
+            return try JSONSerialization.data(withJSONObject: response)
+        } catch {
+            preconditionFailure("Failed to encode benchmark GraphQL fixture: \(error)")
+        }
     }
 
     public static func databasePath(_ label: String) -> String {

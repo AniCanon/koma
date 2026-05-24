@@ -44,7 +44,7 @@ extension SQLiteKomaStore {
         }
     }
 
-    static func bind(_ value: borrowing _KomaSQLiteValue, to statement: OpaquePointer, at index: Int32) throws {
+    static func bind(_ value: borrowing KomaSQLiteStorageValue, to statement: OpaquePointer, at index: Int32) throws {
         var binder = SQLiteStatementBinder(statement: statement, index: index)
         try binder.bind(value)
     }

@@ -1,7 +1,7 @@
 import Foundation
 
 @_documentation(visibility: private)
-public protocol _KomaSQLiteValueBinder {
+public protocol KomaSQLiteValueBinder {
     mutating func bindNull() throws
     mutating func bind(_ value: borrowing String) throws
     mutating func bind(_ value: Bool) throws
@@ -13,7 +13,7 @@ public protocol _KomaSQLiteValueBinder {
 }
 
 @_documentation(visibility: private)
-public extension _KomaSQLiteValueBinder {
+public extension KomaSQLiteValueBinder {
     mutating func bind(_ value: String?) throws {
         guard let value else {
             try bindNull()
@@ -70,7 +70,7 @@ public extension _KomaSQLiteValueBinder {
         try bind(value)
     }
 
-    mutating func bind(_ value: borrowing _KomaSQLiteValue) throws {
+    mutating func bind(_ value: borrowing KomaSQLiteStorageValue) throws {
         switch value {
         case .null:
             try bindNull()

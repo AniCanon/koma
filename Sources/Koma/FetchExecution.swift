@@ -2,12 +2,13 @@ import Foundation
 
 extension KomaFetch {
     func refreshPayload() async throws -> (output: Output, records: [Record]?) {
+        let body = try operation.body?.data()
         var request = KomaRequest(
             method: operation.method,
             path: operation.resolvedPath,
             queryItems: operation.queryItems,
             headers: ["Accept": "application/json"],
-            body: operation.body
+            body: body
         )
         if request.body != nil {
             request.headers["Content-Type"] = "application/json"
@@ -30,7 +31,7 @@ extension KomaFetch {
                 if let jsonPayload = try await jsonPayload(from: response.body) {
                     return jsonPayload
                 }
-            } catch is _KomaJSONError {
+            } catch is KomaJSONFastPathError {
                 // Fall back to the configured decoder when Koma's JSON path
                 // cannot represent the response shape.
             }
@@ -85,20 +86,26 @@ extension KomaFetch {
         from data: borrowing Data
     ) async throws -> (output: Output, records: [Record]?)? {
         guard client.jsonOptimization == .automatic,
-              Record._komaJSONFastPath
+              let jsonRecordType = Record.self as? any KomaJSONFastPathRecord.Type
         else {
             return nil
         }
 
         if Output.self == [Record.Remote].self {
-            let records = try Record._komaJSONRecords(from: data)
+            let decoded = try jsonRecordType.komaJSONRecordValues(from: data)
+            guard let records = decoded as? [Record] else {
+                throw KomaMappingError.unsupportedOutput("Koma JSON fast path returned an unexpected record type.")
+            }
             try await client.store.upsert(records)
             let output: Output = try KomaDefaultRemoteMapper.output(records, as: Output.self)
             return (output, records)
         }
 
         if Output.self == Record.Remote.self {
-            let record = try Record._komaJSONRecord(from: data)
+            let decoded = try jsonRecordType.komaJSONRecordValue(from: data)
+            guard let record = decoded as? Record else {
+                throw KomaMappingError.unsupportedOutput("Koma JSON fast path returned an unexpected record type.")
+            }
             try await client.store.upsert([record])
             let output: Output = try KomaDefaultRemoteMapper.output([record], as: Output.self)
             return (output, [record])
