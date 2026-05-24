@@ -7,19 +7,30 @@ import KomaBenchmarkSupport
 import KomaHTTP
 import KomaSQLite
 import Moya
+import YYJSON
 
 func registerNetworkBenchmarks() {
-    registerJSONDecodeBenchmarks()
+    registerJSONCodecBenchmarks()
     registerURLSessionBenchmarks()
     registerKomaTransportBenchmarks()
     registerKomaResourceNetworkBenchmark()
     registerProviderBenchmarks()
 }
 
-private func registerJSONDecodeBenchmarks() {
+private func registerJSONCodecBenchmarks() {
     for payload in BenchmarkNetworkFixtures.payloads {
         Benchmark("network.foundation.jsondecoder.decode.\(payload.label)") { benchmark in
             let decoder = JSONDecoder()
+            let body = payload.body
+
+            for _ in benchmark.scaledIterations {
+                let projects = try decoder.decode([BenchmarkProject].self, from: body)
+                blackHole(projects.count)
+            }
+        }
+
+        Benchmark("network.yyjson.decoder.decode.\(payload.label)") { benchmark in
+            let decoder = YYJSONDecoder()
             let body = payload.body
 
             for _ in benchmark.scaledIterations {
@@ -34,6 +45,35 @@ private func registerJSONDecodeBenchmarks() {
             for _ in benchmark.scaledIterations {
                 let records = try BenchmarkProjectRecord._komaJSONRecords(from: body)
                 blackHole(records.count)
+            }
+        }
+
+        Benchmark("network.foundation.jsonencoder.encode.\(payload.label)") { benchmark in
+            let encoder = JSONEncoder()
+            let projects = payload.projects
+
+            for _ in benchmark.scaledIterations {
+                let body = try encoder.encode(projects)
+                blackHole(body.count)
+            }
+        }
+
+        Benchmark("network.yyjson.encoder.encode.\(payload.label)") { benchmark in
+            let encoder = YYJSONEncoder()
+            let projects = payload.projects
+
+            for _ in benchmark.scaledIterations {
+                let body = try encoder.encode(projects)
+                blackHole(body.count)
+            }
+        }
+
+        Benchmark("network.koma.json.records.encode.\(payload.label)") { benchmark in
+            let records = payload.projects.map(BenchmarkProjectRecord.init(remote:))
+
+            for _ in benchmark.scaledIterations {
+                let body = try BenchmarkProjectRecord._komaJSONData(records: records)
+                blackHole(body.count)
             }
         }
     }

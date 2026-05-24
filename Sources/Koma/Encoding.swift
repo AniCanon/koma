@@ -43,8 +43,46 @@ public enum KomaQueryEncoder {
         try encoder.encode(value)
     }
 
+    public static func bodyData<Record: KomaEntityRecord>(
+        from value: borrowing Record,
+        encoder: JSONEncoder = JSONEncoder()
+    ) throws -> Data {
+        guard Record._komaJSONFastPath,
+              canUseKomaRecordFastPath(encoder: encoder)
+        else {
+            return try encoder.encode(value)
+        }
+        return try value._komaJSONData()
+    }
+
+    public static func bodyData<Record: KomaEntityRecord>(
+        from value: borrowing [Record],
+        encoder: JSONEncoder = JSONEncoder()
+    ) throws -> Data {
+        guard Record._komaJSONFastPath,
+              canUseKomaRecordFastPath(encoder: encoder)
+        else {
+            return try encoder.encode(value)
+        }
+        return try Record._komaJSONData(records: value)
+    }
+
     public static func bodyDataIfPossible(
         from value: some Encodable,
+        encoder: JSONEncoder = JSONEncoder()
+    ) -> Data? {
+        try? bodyData(from: value, encoder: encoder)
+    }
+
+    public static func bodyDataIfPossible(
+        from value: borrowing some KomaEntityRecord,
+        encoder: JSONEncoder = JSONEncoder()
+    ) -> Data? {
+        try? bodyData(from: value, encoder: encoder)
+    }
+
+    public static func bodyDataIfPossible(
+        from value: borrowing [some KomaEntityRecord],
         encoder: JSONEncoder = JSONEncoder()
     ) -> Data? {
         try? bodyData(from: value, encoder: encoder)
@@ -58,6 +96,42 @@ public enum KomaQueryEncoder {
             return value ? "true" : "false"
         default:
             return String(describing: value)
+        }
+    }
+
+    private static func canUseKomaRecordFastPath(encoder: JSONEncoder) -> Bool {
+        guard encoder.outputFormatting.isEmpty,
+              encoder.userInfo.isEmpty
+        else {
+            return false
+        }
+
+        switch encoder.dateEncodingStrategy {
+        case .deferredToDate:
+            break
+        default:
+            return false
+        }
+
+        switch encoder.dataEncodingStrategy {
+        case .base64:
+            break
+        default:
+            return false
+        }
+
+        switch encoder.keyEncodingStrategy {
+        case .useDefaultKeys:
+            break
+        default:
+            return false
+        }
+
+        switch encoder.nonConformingFloatEncodingStrategy {
+        case .throw:
+            return true
+        default:
+            return false
         }
     }
 }

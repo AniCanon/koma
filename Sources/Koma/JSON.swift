@@ -13,6 +13,7 @@ public enum _KomaJSONError: Error, Equatable, Sendable {
     case missingRequiredField(String)
     case integerOverflow(String)
     case unsupportedEscape(offset: Int)
+    case nonFiniteNumber
     case unavailable
 }
 
@@ -55,6 +56,34 @@ public enum _KomaJSONDecoder {
             try scanner.finish()
             return record
         }
+    }
+}
+
+/// Entry points used by macro-expanded record code to encode JSON arrays and objects.
+@_documentation(visibility: private)
+public enum _KomaJSONEncoder {
+    public static func encodeArray<Record>(
+        _ records: borrowing [Record],
+        _ encode: (Record, inout _KomaJSONWriter) throws -> Void
+    ) throws -> Data {
+        var writer = _KomaJSONWriter()
+        writer.beginArray()
+        var isFirst = true
+        for index in records.indices {
+            writer.writeCommaIfNeeded(isFirst: &isFirst)
+            try encode(records[index], &writer)
+        }
+        writer.endArray()
+        return writer.data()
+    }
+
+    public static func encodeObject<Record>(
+        _ record: borrowing Record,
+        _ encode: (Record, inout _KomaJSONWriter) throws -> Void
+    ) throws -> Data {
+        var writer = _KomaJSONWriter()
+        try encode(record, &writer)
+        return writer.data()
     }
 }
 

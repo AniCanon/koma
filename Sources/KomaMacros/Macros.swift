@@ -28,6 +28,8 @@ import Koma
     named(_komaJSONFastPath),
     named(_komaJSONRecords),
     named(_komaJSONRecord),
+    named(_komaJSONData),
+    named(_komaJSONWrite),
     named(Remote),
     named(remoteValue),
     named(init)

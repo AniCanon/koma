@@ -33,6 +33,9 @@ public protocol KomaEntityRecord: Codable, Sendable {
     static func _komaSQLiteRecord(from reader: borrowing some _KomaSQLiteRowReader) throws -> Self
     static func _komaJSONRecords(from data: borrowing Data) throws -> [Self]
     static func _komaJSONRecord(from data: borrowing Data) throws -> Self
+    static func _komaJSONData(records: borrowing [Self]) throws -> Data
+    func _komaJSONData() throws -> Data
+    func _komaJSONWrite(to writer: inout _KomaJSONWriter) throws
 }
 
 public extension KomaEntityRecord {
@@ -91,6 +94,18 @@ public extension KomaEntityRecord {
     }
 
     static func _komaJSONRecord(from data: borrowing Data) throws -> Self {
+        throw _KomaJSONError.unavailable
+    }
+
+    static func _komaJSONData(records: borrowing [Self]) throws -> Data {
+        throw _KomaJSONError.unavailable
+    }
+
+    func _komaJSONData() throws -> Data {
+        throw _KomaJSONError.unavailable
+    }
+
+    func _komaJSONWrite(to writer: inout _KomaJSONWriter) throws {
         throw _KomaJSONError.unavailable
     }
 }

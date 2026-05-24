@@ -13,6 +13,7 @@ let dependencies: [Package.Dependency] = [
     .package(url: "https://github.com/Moya/Moya.git", exact: "15.0.3"),
     .package(url: "https://github.com/apollographql/apollo-ios.git", exact: "2.1.2"),
     .package(url: "https://github.com/groue/GRDB.swift.git", exact: "7.10.0"),
+    .package(url: "https://github.com/mattt/swift-yyjson.git", exact: "0.5.0"),
     .package(
         url: "https://github.com/stephencelis/SQLite.swift.git",
         exact: "0.16.0",
@@ -43,6 +44,14 @@ let benchmarkTargets: [Target] = enableBenchmarks ? [
         path: "Benchmarks/KomaAndroidBenchmarkCore"
     ),
     .executableTarget(
+        name: "KomaJSONBenchmarks",
+        dependencies: [
+            "KomaBenchmarkSupport",
+            .product(name: "YYJSON", package: "swift-yyjson")
+        ],
+        path: "Benchmarks/KomaJSONBenchmarks"
+    ),
+    .executableTarget(
         name: "KomaBenchmarks",
         dependencies: [
             "Koma",
@@ -57,7 +66,8 @@ let benchmarkTargets: [Target] = enableBenchmarks ? [
             .product(name: "ApolloAPI", package: "apollo-ios"),
             .product(name: "Benchmark", package: "benchmark"),
             .product(name: "GRDB", package: "GRDB.swift"),
-            .product(name: "Moya", package: "Moya")
+            .product(name: "Moya", package: "Moya"),
+            .product(name: "YYJSON", package: "swift-yyjson")
         ],
         path: "Benchmarks/KomaBenchmarks",
         plugins: [
@@ -72,7 +82,8 @@ let benchmarkTargets: [Target] = enableBenchmarks ? [
             "KomaBenchmarkSupport",
             "KomaBenchmarkSQLiteSupport",
             "KomaSQLite",
-            .product(name: "GRDB", package: "GRDB.swift")
+            .product(name: "GRDB", package: "GRDB.swift"),
+            .product(name: "YYJSON", package: "swift-yyjson")
         ],
         path: "Benchmarks/KomaAndroidBenchmarks"
     ),

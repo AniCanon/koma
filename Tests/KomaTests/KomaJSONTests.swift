@@ -33,6 +33,35 @@ private struct JSONFastPathProfileRecord: KomaEntityRecord, Equatable {
     }
 }
 
+@KomaEntity(table: "json_common_scalars")
+private struct JSONCommonScalarRecord: KomaEntityRecord, Equatable {
+    @KomaPrimaryKey var id: String
+    var isActive: Bool
+    var visits: Int64
+    var rating: Double
+    var progress: Float
+    var createdAt: Date
+    var nickname: String?
+
+    init(
+        id: String,
+        isActive: Bool,
+        visits: Int64,
+        rating: Double,
+        progress: Float,
+        createdAt: Date,
+        nickname: String? = nil
+    ) {
+        self.id = id
+        self.isActive = isActive
+        self.visits = visits
+        self.rating = rating
+        self.progress = progress
+        self.createdAt = createdAt
+        self.nickname = nickname
+    }
+}
+
 struct KomaJSONTests {
     @Test
     func `JSON record path decodes empty arrays and single objects`() throws {
@@ -101,6 +130,117 @@ struct KomaJSONTests {
                 publishedAt: Date(timeIntervalSinceReferenceDate: 456.75)
             )
         ])
+    }
+
+    @Test
+    func `JSON record path encodes single objects and arrays`() throws {
+        let records = [
+            JSONProjectRecord(
+                id: "1",
+                name: "Quote \" slash \\ newline \n",
+                rank: 7,
+                deletedAt: Date(timeIntervalSinceReferenceDate: 123.25)
+            ),
+            JSONProjectRecord(id: "2", name: "Beta", rank: 8)
+        ]
+
+        let body = try JSONProjectRecord._komaJSONData(records: records)
+        let decoded = try JSONProjectRecord._komaJSONRecords(from: body)
+
+        #expect(decoded == records)
+        #expect(String(data: body, encoding: .utf8)?.contains(#""deletedAt":"#) == true)
+        #expect(String(data: body, encoding: .utf8)?.contains(#""id":"2","name":"Beta","rank":8}"#) == true)
+    }
+
+    @Test
+    func `JSON record path can encode request bodies`() throws {
+        let record = JSONProjectRecord(id: "1", name: "Alpha", rank: 7)
+
+        let body = try KomaQueryEncoder.bodyData(from: record)
+
+        #expect(String(data: body, encoding: .utf8) == #"{"id":"1","name":"Alpha","rank":7}"#)
+    }
+
+    @Test
+    func `JSON record path round trips common scalar fields`() throws {
+        let record = JSONCommonScalarRecord(
+            id: "scalar-1",
+            isActive: true,
+            visits: 9_223_372_036,
+            rating: 4.5,
+            progress: 0.25,
+            createdAt: Date(timeIntervalSinceReferenceDate: 789.5),
+            nickname: "A\nB"
+        )
+
+        let body = try record._komaJSONData()
+        let decoded = try JSONCommonScalarRecord._komaJSONRecord(from: body)
+
+        #expect(decoded == record)
+        #expect(String(data: body, encoding: .utf8)?.contains(#""createdAt":789.5"#) == true)
+        #expect(String(data: body, encoding: .utf8)?.contains(#""isActive":true"#) == true)
+        #expect(String(data: body, encoding: .utf8)?.contains(#""nickname":"A\nB""#) == true)
+    }
+
+    @Test
+    func `JSON record path rejects ISO dates so configured decoders can own that strategy`() throws {
+        let body = Data(
+            #"[{"id":"1","name":"Alpha","rank":1,"deletedAt":"2026-01-02T03:04:05Z"}]"#.utf8
+        )
+
+        do {
+            _ = try JSONProjectRecord._komaJSONRecords(from: body)
+            Issue.record("Expected fast JSON path to reject ISO date strings.")
+        } catch is _KomaJSONError {
+        } catch {
+            Issue.record("Expected Koma JSON error, got \(error).")
+        }
+    }
+
+    @Test
+    func `request body encoding preserves configured ISO date strategy`() throws {
+        let date = try #require(ISO8601DateFormatter().date(from: "2026-01-02T03:04:05Z"))
+        let record = JSONProjectRecord(id: "1", name: "Alpha", rank: 7, deletedAt: date)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+
+        let body = try KomaQueryEncoder.bodyData(from: record, encoder: encoder)
+
+        #expect(String(data: body, encoding: .utf8)?.contains(#""deletedAt":"2026-01-02T03:04:05Z""#) == true)
+    }
+
+    @Test
+    func `request body encoding preserves configured key strategy`() throws {
+        let record = JSONFastPathProfileRecord(
+            id: "1",
+            title: "Alpha",
+            publishedAt: Date(timeIntervalSinceReferenceDate: 123.25)
+        )
+        let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+
+        let body = try KomaQueryEncoder.bodyData(from: record, encoder: encoder)
+
+        #expect(String(data: body, encoding: .utf8)?.contains(#""published_at":"#) == true)
+    }
+
+    @Test
+    func `JSON record path rejects non finite numbers`() throws {
+        let record = JSONCommonScalarRecord(
+            id: "scalar-1",
+            isActive: true,
+            visits: 1,
+            rating: .infinity,
+            progress: 0.25,
+            createdAt: Date(timeIntervalSinceReferenceDate: 1)
+        )
+
+        do {
+            _ = try record._komaJSONData()
+            Issue.record("Expected non-finite number error.")
+        } catch {
+            #expect(error as? _KomaJSONError == .nonFiniteNumber)
+        }
     }
 
     @Test

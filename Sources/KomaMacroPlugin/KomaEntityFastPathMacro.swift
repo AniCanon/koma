@@ -77,6 +77,9 @@ extension KomaEntityMacro {
                 return "self.\($0.name) = try _komaJSONRequire(\($0.name), \"\($0.name)\")"
             }
             .joined(separator: "\n        ")
+        let encodeFields = properties
+            .map { "try writer.writeField(\"\($0.name)\", self.\($0.name), isFirst: &isFirst)" }
+            .joined(separator: "\n        ")
 
         return [
             """
@@ -114,6 +117,28 @@ extension KomaEntityMacro {
             """
             private init(\(raw: jsonParameters)) throws {
                 \(raw: jsonAssignments)
+            }
+            """,
+            """
+            public static func _komaJSONData(records: borrowing [Self]) throws -> Data {
+                try _KomaJSONEncoder.encodeArray(records) { record, writer in
+                    try record._komaJSONWrite(to: &writer)
+                }
+            }
+            """,
+            """
+            public func _komaJSONData() throws -> Data {
+                try _KomaJSONEncoder.encodeObject(self) { record, writer in
+                    try record._komaJSONWrite(to: &writer)
+                }
+            }
+            """,
+            """
+            public func _komaJSONWrite(to writer: inout _KomaJSONWriter) throws {
+                writer.beginObject()
+                var isFirst = true
+                \(raw: encodeFields)
+                writer.endObject()
             }
             """
         ]
