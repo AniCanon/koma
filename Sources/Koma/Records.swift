@@ -35,6 +35,7 @@ public protocol KomaSQLiteFastPathRecord: KomaGeneratedSchemaRecord {
     var komaSQLiteValues: [KomaSQLiteStorageValue] { get }
 
     func komaSQLiteValues(into values: inout [KomaSQLiteStorageValue])
+    func komaSQLiteValue(at index: Int) -> KomaSQLiteStorageValue
     func komaSQLiteBind(into binder: inout some KomaSQLiteValueBinder) throws
     static func komaSQLiteRecord(from row: KomaSQLiteRow) throws -> Self
     static func komaSQLiteRecord(from reader: borrowing some KomaSQLiteRowReader) throws -> Self
@@ -44,13 +45,21 @@ public protocol KomaSQLiteFastPathRecord: KomaGeneratedSchemaRecord {
 public protocol KomaJSONFastPathRecord: KomaEntityRecord {
     static var komaUsesJSONFastPath: Bool { get }
 
-    static func komaJSONRecordValues(from data: borrowing Data) throws -> [any KomaEntityRecord]
-    static func komaJSONRecordValue(from data: borrowing Data) throws -> any KomaEntityRecord
     static func komaJSONRecords(from data: borrowing Data) throws -> [Self]
     static func komaJSONRecord(from data: borrowing Data) throws -> Self
     static func komaJSONData(records: borrowing [Self]) throws -> Data
     func komaJSONData() throws -> Data
     func komaJSONWrite(to writer: inout KomaJSONWriter) throws
+}
+
+/// Record type that can scan JSON and bind store values in one pass.
+@_documentation(visibility: private)
+public protocol KomaFusedJSONRecord: KomaJSONFastPathRecord & KomaSQLiteFastPathRecord {
+    static func komaJSONBindRecords<Binder: KomaSQLiteJSONValueBinder>(
+        from data: borrowing Data,
+        makeBinder: () throws -> Binder,
+        finish: (inout Binder) throws -> Void
+    ) throws
 }
 
 public extension KomaSQLiteFastPathRecord {
@@ -64,6 +73,10 @@ public extension KomaSQLiteFastPathRecord {
         for value in values {
             try binder.bind(value)
         }
+    }
+
+    func komaSQLiteValue(at index: Int) -> KomaSQLiteStorageValue {
+        komaSQLiteValues[index]
     }
 
     static func komaSQLiteRecord(from reader: borrowing some KomaSQLiteRowReader) throws -> Self {
@@ -135,8 +148,11 @@ public enum KomaStorageKind: String, Equatable, Sendable {
 /// A typed reference to a stored column.
 public struct KomaColumn<Value>: Sendable {
     public let name: String
+    @_documentation(visibility: private)
+    public let index: Int?
 
-    public init(_ name: String) {
+    public init(_ name: String, index: Int? = nil) {
         self.name = name
+        self.index = index
     }
 }

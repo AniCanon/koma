@@ -12,6 +12,9 @@ public actor SQLiteKomaStore: KomaStore {
     var ensuredTables: Set<String> = []
     var activeTransactionID: UUID?
     var transactionWaiters: [CheckedContinuation<Void, Never>] = []
+    var observations: [UUID: SQLiteKomaStoreObservation] = [:]
+    var observationIDsByTable: [String: Set<UUID>] = [:]
+    var pendingChangedTables: Set<String> = []
 
     public init(path: String) async throws {
         try await self.init(path: path, schema: nil, encoder: nil, customDecoder: nil, usesSQLiteFastPath: true)

@@ -22,7 +22,8 @@ public struct KomaEntityMacro: MemberMacro, ExtensionMacro {
 
         let primaryKey = properties.first(where: \.isPrimaryKey)?.name ?? "id"
         let columnMembers = properties
-            .map { "public let \($0.name) = KomaColumn<\($0.type)>(\"\($0.name)\")" }
+            .enumerated()
+            .map { "public let \($0.element.name) = KomaColumn<\($0.element.type)>(\"\($0.element.name)\", index: \($0.offset))" }
             .joined(separator: "\n        ")
         let metadata = properties
             .map {
@@ -103,6 +104,9 @@ public struct KomaEntityMacro: MemberMacro, ExtensionMacro {
         }
         if properties.allSatisfy(\.supportsJSON) {
             conformances.append("KomaJSONFastPathRecord")
+        }
+        if properties.allSatisfy(\.supportsSQLiteFastPath), properties.allSatisfy(\.supportsJSON) {
+            conformances.append("KomaFusedJSONRecord")
         }
 
         return try [

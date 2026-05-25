@@ -9,10 +9,20 @@ public struct KomaJSONScanner {
     public mutating func readArray<Element>(
         _ decode: (inout KomaJSONScanner) throws -> Element
     ) throws -> [Element] {
+        try readArray(estimatedCount: 0, decode)
+    }
+
+    public mutating func readArray<Element>(
+        estimatedCount: Int,
+        _ decode: (inout KomaJSONScanner) throws -> Element
+    ) throws -> [Element] {
         try expect(.leftBracket)
         try skipWhitespace()
 
         var elements: [Element] = []
+        if estimatedCount > 0 {
+            elements.reserveCapacity(estimatedCount)
+        }
         guard !consumeIf(.rightBracket) else {
             return elements
         }
@@ -28,8 +38,37 @@ public struct KomaJSONScanner {
         }
     }
 
+    public mutating func scanArray(
+        _ consume: (inout KomaJSONScanner) throws -> Void
+    ) throws {
+        try expect(.leftBracket)
+        try skipWhitespace()
+
+        guard !consumeIf(.rightBracket) else {
+            return
+        }
+
+        while true {
+            try consume(&self)
+            try skipWhitespace()
+            if consumeIf(.comma) {
+                continue
+            }
+            try expect(.rightBracket)
+            return
+        }
+    }
+
     public mutating func readObject(
         _ consumeValueForKey: (String, inout KomaJSONScanner) throws -> Void
+    ) throws {
+        try readObjectKeyed { key, scanner in
+            try consumeValueForKey(key.stringValue, &scanner)
+        }
+    }
+
+    public mutating func readObjectKeyed(
+        _ consumeValueForKey: (KomaJSONKey, inout KomaJSONScanner) throws -> Void
     ) throws {
         try expect(.leftBrace)
         try skipWhitespace()
@@ -39,7 +78,7 @@ public struct KomaJSONScanner {
         }
 
         while true {
-            let key = try readString()
+            let key = try readKey()
             try expect(.colon)
             try consumeValueForKey(key, &self)
             try skipWhitespace()
@@ -71,11 +110,58 @@ public struct KomaJSONScanner {
         throw KomaJSONFastPathError.unexpectedEnd
     }
 
+    public mutating func readText() throws -> KomaJSONText {
+        try expect(.quote)
+        let start = offset
+
+        while offset < buffer.count {
+            let byte = buffer[offset]
+            if byte == JSONByte.quote.rawValue {
+                let end = offset
+                offset += 1
+                return KomaJSONText(buffer: buffer, range: start ..< end)
+            }
+            if byte == JSONByte.backslash.rawValue {
+                return try KomaJSONText(stringValue: readEscapedString(start: start))
+            }
+            offset += 1
+        }
+
+        throw KomaJSONFastPathError.unexpectedEnd
+    }
+
+    public mutating func readKey() throws -> KomaJSONKey {
+        try expect(.quote)
+        let start = offset
+
+        while offset < buffer.count {
+            let byte = buffer[offset]
+            if byte == JSONByte.quote.rawValue {
+                let end = offset
+                offset += 1
+                return KomaJSONKey(buffer: buffer, range: start ..< end)
+            }
+            if byte == JSONByte.backslash.rawValue {
+                return try KomaJSONKey(stringValue: readEscapedString(start: start))
+            }
+            offset += 1
+        }
+
+        throw KomaJSONFastPathError.unexpectedEnd
+    }
+
     public mutating func readOptionalString() throws -> String? {
         if try consumeNullIfPresent() {
             return nil
         }
         return try readString()
+    }
+
+    public mutating func readOptionalText() throws -> KomaJSONText? {
+        if try consumeNullIfPresent() {
+            return nil
+        }
+        return try readText()
     }
 
     public mutating func readBool() throws -> Bool {
@@ -116,13 +202,7 @@ public struct KomaJSONScanner {
     }
 
     public mutating func readDouble() throws -> Double {
-        try skipWhitespace()
-        let range = try readNumberRange()
-        let literal = String(decoding: buffer[range], as: UTF8.self)
-        guard let value = Double(literal) else {
-            throw KomaJSONFastPathError.invalidNumber(offset: range.lowerBound)
-        }
-        return value
+        try readDoubleValue()
     }
 
     public mutating func readOptionalDouble() throws -> Double? {

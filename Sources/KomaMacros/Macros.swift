@@ -23,13 +23,13 @@ import Koma
     named(komaGeneratedCreateTableSQL),
     named(komaUsesSQLiteFastPath),
     named(komaSQLiteValues),
+    named(komaSQLiteValue),
     named(komaSQLiteBind),
     named(komaSQLiteRecord),
     named(komaUsesJSONFastPath),
-    named(komaJSONRecordValues),
-    named(komaJSONRecordValue),
     named(komaJSONRecords),
     named(komaJSONRecord),
+    named(komaJSONBindRecords),
     named(komaJSONData),
     named(komaJSONWrite),
     named(Remote),
@@ -40,7 +40,8 @@ import Koma
     extension,
     conformances: KomaGeneratedSchemaRecord,
     KomaSQLiteFastPathRecord,
-    KomaJSONFastPathRecord
+    KomaJSONFastPathRecord,
+    KomaFusedJSONRecord
 )
 public macro KomaEntity(table: String? = nil, as: Any.Type? = nil) = #externalMacro(
     module: "KomaMacroPlugin",

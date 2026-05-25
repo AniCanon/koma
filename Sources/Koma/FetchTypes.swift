@@ -139,6 +139,15 @@ public enum KomaFetchPolicy: Sendable {
     case localThenRefresh
 }
 
+/// Controls whether a resource observation completes after one refresh or stays attached to local store changes.
+public enum KomaObservationMode: Sendable {
+    /// Emit the current local value, refresh once, emit the refreshed local value, then finish.
+    case once
+
+    /// Keep observing the local query and emit whenever matching store tables change.
+    case live
+}
+
 public enum KomaSnapshotSource: Equatable, Sendable {
     case local
     case network

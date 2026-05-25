@@ -154,6 +154,17 @@ struct KomaJSONTests {
     }
 
     @Test
+    func `JSON record path falls back for high precision doubles`() throws {
+        let body = Data(
+            #"{"id":"scalar-1","isActive":true,"visits":1,"rating":0.123456789012345678901,"progress":0.25,"createdAt":789.5}"#.utf8
+        )
+
+        let decoded = try JSONCommonScalarRecord.komaJSONRecord(from: body)
+
+        #expect(decoded.rating == Double("0.123456789012345678901"))
+    }
+
+    @Test
     func `JSON record path rejects ISO dates so configured decoders can own that strategy`() throws {
         let body = Data(
             #"[{"id":"1","name":"Alpha","rank":1,"deletedAt":"2026-01-02T03:04:05Z"}]"#.utf8

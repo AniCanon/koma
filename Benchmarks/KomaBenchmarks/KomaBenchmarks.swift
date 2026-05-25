@@ -37,6 +37,78 @@ let benchmarks: @Sendable () -> Void = {
         }
     }
 
+    Benchmark("koma.sqlite.steadyUpsert.1k") { benchmark in
+        let path = BenchmarkFixtures.databasePath("koma-steady-upsert")
+        defer { BenchmarkFixtures.removeDatabaseFiles(path) }
+
+        let store = try await SQLiteKomaStore(path: path)
+
+        for _ in benchmark.scaledIterations {
+            try await store.upsert(smallRecords)
+        }
+
+        blackHole(store)
+    }
+
+    Benchmark("koma.sqlite.fusedJSONUpsert.1k") { benchmark in
+        for _ in benchmark.scaledIterations {
+            let path = BenchmarkFixtures.databasePath("koma-fused-json-upsert")
+            defer { BenchmarkFixtures.removeDatabaseFiles(path) }
+
+            let store = try await SQLiteKomaStore(path: path)
+            try await store.upsertJSON(smallResponse, record: BenchmarkProjectRecord.self)
+            blackHole(store)
+        }
+    }
+
+    Benchmark("koma.sqlite.fusedJSONSteadyUpsert.1k") { benchmark in
+        let path = BenchmarkFixtures.databasePath("koma-fused-json-steady-upsert")
+        defer { BenchmarkFixtures.removeDatabaseFiles(path) }
+
+        let store = try await SQLiteKomaStore(path: path)
+
+        for _ in benchmark.scaledIterations {
+            try await store.upsertJSON(smallResponse, record: BenchmarkProjectRecord.self)
+        }
+
+        blackHole(store)
+    }
+
+    Benchmark("koma.sqlite.observedUpsert.1k.limit100") { benchmark in
+        let path = BenchmarkFixtures.databasePath("koma-observed-upsert")
+        defer { BenchmarkFixtures.removeDatabaseFiles(path) }
+
+        let store = try await SQLiteKomaStore(path: path)
+        let sink = BenchmarkObservationSink()
+        let observation = Task {
+            do {
+                let stream = store
+                    .query(BenchmarkProjectRecord.self)
+                    .where { $0.deletedAt == nil }
+                    .order(by: \.name)
+                    .limit(100)
+                    .observe()
+                for try await records in stream {
+                    await sink.record(records.count)
+                }
+            } catch {
+                await sink.record(-1)
+            }
+        }
+
+        _ = await sink.waitForCount(1)
+        var expectedEmissions = 1
+
+        for _ in benchmark.scaledIterations {
+            try await store.upsert(smallRecords)
+            expectedEmissions += 1
+            _ = await sink.waitForCount(expectedEmissions)
+        }
+
+        observation.cancel()
+        blackHole(await sink.latestCount())
+    }
+
     Benchmark("rawsqlite.batchUpsert.1k") { benchmark in
         for _ in benchmark.scaledIterations {
             let path = BenchmarkFixtures.databasePath("raw-upsert")
@@ -239,4 +311,42 @@ let benchmarks: @Sendable () -> Void = {
 
     registerComparisonBenchmarks(small: small, large: large)
     registerNetworkBenchmarks()
+}
+
+private actor BenchmarkObservationSink {
+    private var emissionCount = 0
+    private var latest = 0
+    private var waiters: [(count: Int, continuation: CheckedContinuation<Int, Never>)] = []
+
+    func record(_ count: Int) {
+        emissionCount += 1
+        latest = count
+        resumeSatisfiedWaiters()
+    }
+
+    func waitForCount(_ count: Int) async -> Int {
+        if emissionCount >= count {
+            return latest
+        }
+
+        return await withCheckedContinuation { continuation in
+            waiters.append((count, continuation))
+        }
+    }
+
+    func latestCount() -> Int {
+        latest
+    }
+
+    private func resumeSatisfiedWaiters() {
+        var remaining: [(count: Int, continuation: CheckedContinuation<Int, Never>)] = []
+        for waiter in waiters {
+            if emissionCount >= waiter.count {
+                waiter.continuation.resume(returning: latest)
+            } else {
+                remaining.append(waiter)
+            }
+        }
+        waiters = remaining
+    }
 }

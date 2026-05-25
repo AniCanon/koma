@@ -5,15 +5,19 @@ public struct KomaPredicateBuilder<Record: KomaEntityRecord>: Sendable {
     public init() {}
 
     public subscript<Value>(dynamicMember keyPath: KeyPath<Record.Columns, KomaColumn<Value>>) -> KomaColumnExpression<Value> {
-        KomaColumnExpression(column: Record.columns[keyPath: keyPath].name)
+        let column = Record.columns[keyPath: keyPath]
+        return KomaColumnExpression(column: column.name, columnIndex: column.index)
     }
 }
 
 public struct KomaColumnExpression<Value>: Sendable {
     public let column: String
+    @_documentation(visibility: private)
+    public let columnIndex: Int?
 
-    public init(column: String) {
+    public init(column: String, columnIndex: Int? = nil) {
         self.column = column
+        self.columnIndex = columnIndex
     }
 }
 
@@ -35,10 +39,13 @@ public struct KomaPredicate: Equatable, Sendable {
     }
 
     public let column: String?
+    @_documentation(visibility: private)
+    public let columnIndex: Int?
     public let operation: Operation
 
-    public init(column: String?, operation: Operation) {
+    public init(column: String?, columnIndex: Int? = nil, operation: Operation) {
         self.column = column
+        self.columnIndex = columnIndex
         self.operation = operation
     }
 
@@ -60,11 +67,11 @@ public struct KomaPredicate: Equatable, Sendable {
 
 public extension KomaColumnExpression {
     func isNull() -> KomaPredicate {
-        KomaPredicate(column: column, operation: .isNull)
+        KomaPredicate(column: column, columnIndex: columnIndex, operation: .isNull)
     }
 
     func isNotNull() -> KomaPredicate {
-        KomaPredicate(column: column, operation: .isNotNull)
+        KomaPredicate(column: column, columnIndex: columnIndex, operation: .isNotNull)
     }
 }
 
@@ -89,44 +96,44 @@ public enum KomaValue: Equatable, Sendable {
 }
 
 public func == <Value: KomaBindableValue>(lhs: KomaColumnExpression<Value>, rhs: Value) -> KomaPredicate {
-    KomaPredicate(column: lhs.column, operation: .equals(rhs.komaValue))
+    KomaPredicate(column: lhs.column, columnIndex: lhs.columnIndex, operation: .equals(rhs.komaValue))
 }
 
 public func == <Value: KomaBindableValue>(lhs: KomaColumnExpression<Value?>, rhs: Value?) -> KomaPredicate {
     guard let rhs else {
-        return KomaPredicate(column: lhs.column, operation: .isNull)
+        return KomaPredicate(column: lhs.column, columnIndex: lhs.columnIndex, operation: .isNull)
     }
-    return KomaPredicate(column: lhs.column, operation: .equals(rhs.komaValue))
+    return KomaPredicate(column: lhs.column, columnIndex: lhs.columnIndex, operation: .equals(rhs.komaValue))
 }
 
 public func != <Value>(lhs: KomaColumnExpression<Value?>, rhs: Value?) -> KomaPredicate {
     if rhs == nil {
-        return KomaPredicate(column: lhs.column, operation: .isNotNull)
+        return KomaPredicate(column: lhs.column, columnIndex: lhs.columnIndex, operation: .isNotNull)
     }
     guard let value = rhs as? any KomaBindableValue else {
-        return KomaPredicate(column: lhs.column, operation: .isNotNull)
+        return KomaPredicate(column: lhs.column, columnIndex: lhs.columnIndex, operation: .isNotNull)
     }
-    return KomaPredicate(column: lhs.column, operation: .notEquals(value.komaValue))
+    return KomaPredicate(column: lhs.column, columnIndex: lhs.columnIndex, operation: .notEquals(value.komaValue))
 }
 
 public func != <Value: KomaBindableValue>(lhs: KomaColumnExpression<Value>, rhs: Value) -> KomaPredicate {
-    KomaPredicate(column: lhs.column, operation: .notEquals(rhs.komaValue))
+    KomaPredicate(column: lhs.column, columnIndex: lhs.columnIndex, operation: .notEquals(rhs.komaValue))
 }
 
 public func < <Value: KomaBindableValue>(lhs: KomaColumnExpression<Value>, rhs: Value) -> KomaPredicate {
-    KomaPredicate(column: lhs.column, operation: .lessThan(rhs.komaValue))
+    KomaPredicate(column: lhs.column, columnIndex: lhs.columnIndex, operation: .lessThan(rhs.komaValue))
 }
 
 public func <= <Value: KomaBindableValue>(lhs: KomaColumnExpression<Value>, rhs: Value) -> KomaPredicate {
-    KomaPredicate(column: lhs.column, operation: .lessThanOrEquals(rhs.komaValue))
+    KomaPredicate(column: lhs.column, columnIndex: lhs.columnIndex, operation: .lessThanOrEquals(rhs.komaValue))
 }
 
 public func > <Value: KomaBindableValue>(lhs: KomaColumnExpression<Value>, rhs: Value) -> KomaPredicate {
-    KomaPredicate(column: lhs.column, operation: .greaterThan(rhs.komaValue))
+    KomaPredicate(column: lhs.column, columnIndex: lhs.columnIndex, operation: .greaterThan(rhs.komaValue))
 }
 
 public func >= <Value: KomaBindableValue>(lhs: KomaColumnExpression<Value>, rhs: Value) -> KomaPredicate {
-    KomaPredicate(column: lhs.column, operation: .greaterThanOrEquals(rhs.komaValue))
+    KomaPredicate(column: lhs.column, columnIndex: lhs.columnIndex, operation: .greaterThanOrEquals(rhs.komaValue))
 }
 
 public func && (lhs: KomaPredicate, rhs: KomaPredicate) -> KomaPredicate {
@@ -179,56 +186,59 @@ extension Date: KomaBindableValue {
 
 public extension KomaColumnExpression where Value == String {
     func contains(_ value: String) -> KomaPredicate {
-        KomaPredicate(column: column, operation: .like(.string("%\(value)%")))
+        KomaPredicate(column: column, columnIndex: columnIndex, operation: .like(.string("%\(value)%")))
     }
 
     func hasPrefix(_ value: String) -> KomaPredicate {
-        KomaPredicate(column: column, operation: .like(.string("\(value)%")))
+        KomaPredicate(column: column, columnIndex: columnIndex, operation: .like(.string("\(value)%")))
     }
 
     func hasSuffix(_ value: String) -> KomaPredicate {
-        KomaPredicate(column: column, operation: .like(.string("%\(value)")))
+        KomaPredicate(column: column, columnIndex: columnIndex, operation: .like(.string("%\(value)")))
     }
 
     func like(_ value: String) -> KomaPredicate {
-        KomaPredicate(column: column, operation: .like(.string(value)))
+        KomaPredicate(column: column, columnIndex: columnIndex, operation: .like(.string(value)))
     }
 }
 
 public extension KomaColumnExpression where Value == String? {
     func contains(_ value: String) -> KomaPredicate {
-        KomaPredicate(column: column, operation: .like(.string("%\(value)%")))
+        KomaPredicate(column: column, columnIndex: columnIndex, operation: .like(.string("%\(value)%")))
     }
 
     func hasPrefix(_ value: String) -> KomaPredicate {
-        KomaPredicate(column: column, operation: .like(.string("\(value)%")))
+        KomaPredicate(column: column, columnIndex: columnIndex, operation: .like(.string("\(value)%")))
     }
 
     func hasSuffix(_ value: String) -> KomaPredicate {
-        KomaPredicate(column: column, operation: .like(.string("%\(value)")))
+        KomaPredicate(column: column, columnIndex: columnIndex, operation: .like(.string("%\(value)")))
     }
 
     func like(_ value: String) -> KomaPredicate {
-        KomaPredicate(column: column, operation: .like(.string(value)))
+        KomaPredicate(column: column, columnIndex: columnIndex, operation: .like(.string(value)))
     }
 }
 
 public extension KomaColumnExpression where Value: KomaBindableValue {
     func `in`(_ values: [Value]) -> KomaPredicate {
-        KomaPredicate(column: column, operation: .in(values.map(\.komaValue)))
+        KomaPredicate(column: column, columnIndex: columnIndex, operation: .in(values.map(\.komaValue)))
     }
 
     func between(_ lowerBound: Value, _ upperBound: Value) -> KomaPredicate {
-        KomaPredicate(column: column, operation: .between(lowerBound.komaValue, upperBound.komaValue))
+        KomaPredicate(column: column, columnIndex: columnIndex, operation: .between(lowerBound.komaValue, upperBound.komaValue))
     }
 }
 
 public struct KomaSortDescriptor: Equatable, Sendable {
     public let column: String
+    @_documentation(visibility: private)
+    public let columnIndex: Int?
     public let direction: KomaSortDirection
 
-    public init(column: String, direction: KomaSortDirection = .ascending) {
+    public init(column: String, columnIndex: Int? = nil, direction: KomaSortDirection = .ascending) {
         self.column = column
+        self.columnIndex = columnIndex
         self.direction = direction
     }
 }

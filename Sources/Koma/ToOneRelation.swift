@@ -57,8 +57,10 @@ public struct KomaToOneRelationQuery<Owner: KomaEntityRecord, RelatedRecord: Kom
         _ direction: KomaSortDirection = .ascending
     ) -> Self {
         var copy = self
-        let column = RelatedRecord.columns[keyPath: keyPath].name
-        copy.request.order.append(KomaSortDescriptor(column: column, direction: direction))
+        let column = RelatedRecord.columns[keyPath: keyPath]
+        copy.request.order.append(
+            KomaSortDescriptor(column: column.name, columnIndex: column.index, direction: direction)
+        )
         copy.isUnmodifiedRelationLoad = false
         return copy
     }

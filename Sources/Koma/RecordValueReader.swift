@@ -5,7 +5,7 @@ enum KomaRecordValueReader {
         if let fastRecord = record as? any KomaSQLiteFastPathRecord,
            let index = Record.komaColumns.firstIndex(where: { $0.name == column })
         {
-            return try value(fastRecord.komaSQLiteValues[index], column: column)
+            return try value(fastRecord.komaSQLiteValue(at: index), column: column)
         }
 
         let data = try JSONEncoder().encode(record)
