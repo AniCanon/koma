@@ -10,7 +10,9 @@ Koma is designed to keep app code high level while moving the repetitive work in
 - SQLite writes bind typed values directly and avoid storing opaque REST payload blobs.
 - SQLite reads use generated record fast paths for supported scalar columns.
 - The optimized JSON path decodes common flat REST responses directly into records and encodes supported record-shaped request bodies without going through the general-purpose encoder.
+- Resource refresh can use the fused JSON path to scan response bytes and bind SQLite values without first building an intermediate record array when the caller only needs the persisted result.
 - Resource fetches persist normalized records first, then reuse the same local query engine for filtering, sorting, limits, and relationships.
+- Live observations use table invalidation plus buffered signals, so repeated writes coalesce while an observer is refetching.
 - Relationship `.include(...)` batch-loads related records and avoids N+1 query patterns.
 - The HTTP layer stays close to `URLSession`; plugins compose auth, retry, and logging without hiding the transport.
 
@@ -42,6 +44,17 @@ Use raw SQLite as the lower-bound storage baseline. Use GRDB as the mature Swift
 For networking, compare transport-only numbers against `URLSession` and full decode paths against URLSession, Alamofire, Moya, and Apollo where each tool's model applies. Koma should be transparent when it is measuring REST and when Apollo is measuring a GraphQL client stack.
 
 Official numbers should quote p50 and p90 from `scripts/benchmark-official.sh`, include the benchmark artifact path, and avoid claims from uncommitted local runs.
+
+## Observation
+
+Observation is intentionally store-first:
+
+- `observe()` on resource fetches emits cached local data first.
+- `.once` refreshes one endpoint request, emits the refreshed local result, and completes.
+- `.live` stays subscribed to the underlying local query and emits when matching tables change.
+- SQLite observation coalesces rapid invalidations per observer instead of spawning a refetch task for every write.
+
+This keeps Koma cross-platform. Apple UI can consume the `AsyncStream` from SwiftUI/TCA, Android Swift can bridge it into coroutine or platform-specific stream adapters, and the core does not depend on Combine, Observation, Android coroutines, or an Apple-only runtime.
 
 ## JSON
 

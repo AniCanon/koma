@@ -144,6 +144,18 @@ let snapshot = try await projects.list()
     .fetch(policy: .networkFirstFallback)
 ```
 
+Resource fetches are database-first when observed. The default observation emits the local value, refreshes once, emits the refreshed local value, then completes. Use live mode when a screen should stay attached to local table changes:
+
+```swift
+for await snapshot in projects.list()
+    .where { $0.deletedAt == nil }
+    .order(by: \.name)
+    .observe(mode: .live)
+{
+    render(snapshot.value)
+}
+```
+
 `koma.resource(ProjectResources.self)` is also supported.
 
 For scoped code where passing `koma` everywhere adds noise, use the task-local context:
@@ -337,16 +349,18 @@ scripts/benchmark-android.sh .benchmark-results/local-android
 
 Benchmark dependencies are opt-in. The package only resolves Alamofire, Moya, Apollo, GRDB, and `swift-benchmark` when `KOMA_ENABLE_BENCHMARKS=1`; normal app consumers do not download them.
 
-Lower is better. These are p50 wall-clock baselines from release builds captured on May 24, 2026 with Swift 6.3. The Apple run uses the SwiftPM benchmark runner on Darwin arm64 as the iOS-side runtime baseline; it is not an on-device iOS claim yet. The Android run uses an arm64 emulator.
+Lower is better. These are p50 wall-clock baselines from release builds captured with Swift 6.3. The Apple run was captured on May 25, 2026 with the SwiftPM benchmark runner on Darwin arm64 as the iOS-side runtime baseline; it is not an on-device iOS claim yet. The Android run was captured on May 24, 2026 with an arm64 emulator. Host GRDB is omitted from the Apple table because this Swift 6.3 toolchain still hits a release-mode GRDB benchmark compile failure.
 
 Apple/Darwin storage:
 
 | Operation | Koma | Raw SQLite | Core Data | SwiftData |
 | --- | ---: | ---: | ---: | ---: |
-| Open + ensure schema | 0.815 ms | n/a | 1.662 ms | 1.622 ms |
-| Upsert or insert 1k records | 2.055 ms | 1.938 ms | 8.282 ms | 53.000 ms |
-| Filtered fetch 10k, limit 100 | 12.000 ms | 11.000 ms | 54.000 ms | 550.000 ms |
-| Inner join filter 10k, limit 100 | 33.000 ms | 30.000 ms | n/a | n/a |
+| Open + ensure schema | 1.712 ms | n/a | 2.935 ms | 6.263 ms |
+| Upsert or insert 1k records | 1.678 ms | 1.953 ms | 16.000 ms | 128.000 ms |
+| Observed upsert 1k + refetch | 2.652 ms | n/a | n/a | n/a |
+| Fused JSON upsert 1k | 2.099 ms | n/a | n/a | n/a |
+| Filtered fetch 10k, limit 100 | 8.360 ms | 10.000 ms | 102.000 ms | 854.000 ms |
+| Inner join filter 10k, limit 100 | 37.000 ms | 28.000 ms | n/a | n/a |
 
 Android emulator storage:
 
@@ -361,9 +375,10 @@ JSON and request pipeline:
 
 | Platform | Operation | Koma | Foundation | YYJSON | Other |
 | --- | --- | ---: | ---: | ---: | ---: |
-| Apple/Darwin | Decode 1k records | 0.283 ms | 1.335 ms | 0.529 ms | n/a |
-| Apple/Darwin | Encode 1k records | 0.381 ms | 1.146 ms | 0.415 ms | n/a |
-| Apple/Darwin | Mock GET + decode 1k | 0.371 ms | 1.469 ms | n/a | Alamofire 1.555 ms, Moya 1.556 ms, Apollo 41.000 ms |
+| Apple/Darwin | Decode 1k records | 0.409 ms | 2.839 ms | 0.874 ms | n/a |
+| Apple/Darwin | Encode 1k records | 0.594 ms | 2.288 ms | 0.391 ms | n/a |
+| Apple/Darwin | Mock GET + decode 1k | 2.621 ms | n/a | n/a | Alamofire 3.400 ms, Moya 3.125 ms, Apollo 85.000 ms |
+| Apple/Darwin | Resource `networkFirstFallback` 1k | 2.320 ms | n/a | n/a | URLSession resource 4.334 ms |
 | Android emulator | Decode 1k records | 0.420 ms | 1.640 ms | 0.949 ms | n/a |
 | Android emulator | Encode 1k records | 0.591 ms | 1.378 ms | 0.739 ms | n/a |
 
