@@ -13,7 +13,7 @@ import Foundation
 public struct KomaModelQuery<Model: KomaModel>: @unchecked Sendable {
     private let store: any KomaStore
     private var request: KomaQueryRequest<Model.Record>
-    private var includes: [([Model.Record], KomaGraphContext) async throws -> Void] = []
+    private var includes: [KomaModelQueryInclude<Model.Record>] = []
 
     public init(store: any KomaStore, model: Model.Type) {
         self.store = store
@@ -36,8 +36,10 @@ public struct KomaModelQuery<Model: KomaModel>: @unchecked Sendable {
         _ direction: KomaSortDirection = .ascending
     ) -> Self {
         var copy = self
-        let column = Model.Record.columns[keyPath: keyPath].name
-        copy.request.order.append(KomaSortDescriptor(column: column, direction: direction))
+        let column = Model.Record.columns[keyPath: keyPath]
+        copy.request.order.append(
+            KomaSortDescriptor(column: column.name, columnIndex: column.index, direction: direction)
+        )
         return copy
     }
 
@@ -92,9 +94,11 @@ public struct KomaModelQuery<Model: KomaModel>: @unchecked Sendable {
         _ relation: KomaToManyRelation<Model.Record, RelatedRecord, RelatedModel>
     ) -> Self where RelatedModel.Record == RelatedRecord {
         var copy = self
-        copy.includes.append { records, graphContext in
-            try await graphContext.preload(relation, owners: records)
-        }
+        copy.includes.append(
+            KomaModelQueryInclude(tableName: RelatedRecord.komaTableName) { records, graphContext in
+                try await graphContext.preload(relation, owners: records)
+            }
+        )
         return copy
     }
 
@@ -102,9 +106,11 @@ public struct KomaModelQuery<Model: KomaModel>: @unchecked Sendable {
         _ relation: KomaToOneRelation<Model.Record, RelatedRecord, RelatedModel>
     ) -> Self where RelatedModel.Record == RelatedRecord {
         var copy = self
-        copy.includes.append { records, graphContext in
-            try await graphContext.preload(relation, owners: records)
-        }
+        copy.includes.append(
+            KomaModelQueryInclude(tableName: RelatedRecord.komaTableName) { records, graphContext in
+                try await graphContext.preload(relation, owners: records)
+            }
+        )
         return copy
     }
 
@@ -112,13 +118,15 @@ public struct KomaModelQuery<Model: KomaModel>: @unchecked Sendable {
         _ keyPath: KeyPath<Model, KomaRelationQuery<Model.Record, RelatedRecord, RelatedModel>>
     ) -> Self where RelatedModel.Record == RelatedRecord {
         var copy = self
-        copy.includes.append { records, graphContext in
-            let models = records.map { Model(record: $0, graphContext: graphContext) }
-            guard let relation = models.first?[keyPath: keyPath].relation else {
-                return
+        copy.includes.append(
+            KomaModelQueryInclude(tableName: RelatedRecord.komaTableName) { records, graphContext in
+                let models = records.map { Model(record: $0, graphContext: graphContext) }
+                guard let relation = models.first?[keyPath: keyPath].relation else {
+                    return
+                }
+                try await graphContext.preload(relation, owners: records)
             }
-            try await graphContext.preload(relation, owners: records)
-        }
+        )
         return copy
     }
 
@@ -126,23 +134,56 @@ public struct KomaModelQuery<Model: KomaModel>: @unchecked Sendable {
         _ keyPath: KeyPath<Model, KomaToOneRelationQuery<Model.Record, RelatedRecord, RelatedModel>>
     ) -> Self where RelatedModel.Record == RelatedRecord {
         var copy = self
-        copy.includes.append { records, graphContext in
-            let models = records.map { Model(record: $0, graphContext: graphContext) }
-            guard let relation = models.first?[keyPath: keyPath].relation else {
-                return
+        copy.includes.append(
+            KomaModelQueryInclude(tableName: RelatedRecord.komaTableName) { records, graphContext in
+                let models = records.map { Model(record: $0, graphContext: graphContext) }
+                guard let relation = models.first?[keyPath: keyPath].relation else {
+                    return
+                }
+                try await graphContext.preload(relation, owners: records)
             }
-            try await graphContext.preload(relation, owners: records)
-        }
+        )
         return copy
     }
 
     public func fetch() async throws -> [Model] {
         let records = try await store.fetch(request)
-        let graphContext = KomaGraphContext(store: store)
-        for include in includes {
-            try await include(records, graphContext)
+        return try await models(from: records)
+    }
+
+    /// Observes this hydrated model query when the underlying store supports live invalidation.
+    ///
+    /// Stores that do not support observation emit the current query result once.
+    public func observe() -> AsyncThrowingStream<[Model], Error> {
+        if let observableStore = store as? any KomaObservableStore {
+            let includeTables = Set(includes.map(\.tableName))
+            let records = observableStore.observe(request, observing: includeTables)
+            return AsyncThrowingStream { continuation in
+                let task = Task {
+                    do {
+                        for try await records in records {
+                            try await continuation.yield(models(from: records))
+                        }
+                        continuation.finish()
+                    } catch {
+                        continuation.finish(throwing: error)
+                    }
+                }
+                continuation.onTermination = { _ in task.cancel() }
+            }
         }
-        return records.map { Model(record: $0, graphContext: graphContext) }
+
+        return AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    try await continuation.yield(fetch())
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
     }
 
     public func first() async throws -> Model? {
@@ -156,6 +197,19 @@ public struct KomaModelQuery<Model: KomaModel>: @unchecked Sendable {
     public func exists() async throws -> Bool {
         try await !limit(1).fetch().isEmpty
     }
+
+    private func models(from records: [Model.Record]) async throws -> [Model] {
+        let graphContext = KomaGraphContext(store: store)
+        for include in includes {
+            try await include.preload(records, graphContext)
+        }
+        return records.map { Model(record: $0, graphContext: graphContext) }
+    }
+}
+
+private struct KomaModelQueryInclude<OwnerRecord: KomaEntityRecord>: @unchecked Sendable {
+    let tableName: String
+    let preload: ([OwnerRecord], KomaGraphContext) async throws -> Void
 }
 
 public extension KomaStore {

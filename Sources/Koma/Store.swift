@@ -11,6 +11,28 @@ public protocol KomaStore: Sendable {
     func transaction<Value: Sendable>(_ body: @Sendable (any KomaStore) async throws -> Value) async throws -> Value
 }
 
+/// A store that can keep local queries alive and emit again when matching tables change.
+public protocol KomaObservableStore: KomaStore {
+    func observe<Record: KomaEntityRecord>(
+        _ request: KomaQueryRequest<Record>,
+        observing additionalTables: Set<String>
+    ) -> AsyncThrowingStream<[Record], Error>
+}
+
+/// Store-private extension point for persisting macro-scanned JSON without materializing record arrays.
+@_documentation(visibility: private)
+public protocol KomaFusedJSONStore: KomaStore {
+    func upsertJSON(_ data: Data, record: (some KomaFusedJSONRecord).Type) async throws
+}
+
+public extension KomaObservableStore {
+    func observe<Record: KomaEntityRecord>(
+        _ request: KomaQueryRequest<Record>
+    ) -> AsyncThrowingStream<[Record], Error> {
+        observe(request, observing: [])
+    }
+}
+
 public extension KomaStore {
     /// Starts a lazy record query.
     func query<Record: KomaEntityRecord>(_ record: Record.Type) -> KomaQuery<Record> {

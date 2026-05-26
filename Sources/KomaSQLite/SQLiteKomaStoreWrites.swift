@@ -39,12 +39,12 @@ public extension SQLiteKomaStore {
                         throw SQLiteKomaError.executionFailed("SQLite upsert failed.")
                     }
                     sqlite3_reset(statement)
-                    sqlite3_clear_bindings(statement)
                 }
             }
             if ownsTransaction {
                 try execute("COMMIT")
             }
+            recordChangedTable(Record.komaTableName)
         } catch {
             if ownsTransaction {
                 try? execute("ROLLBACK")
@@ -81,6 +81,9 @@ public extension SQLiteKomaStore {
             }
             if ownsTransaction {
                 try execute("COMMIT")
+            }
+            if changes > 0 {
+                recordChangedTable(Record.komaTableName)
             }
             return changes
         } catch {
@@ -128,6 +131,9 @@ public extension SQLiteKomaStore {
             if ownsTransaction {
                 try execute("COMMIT")
             }
+            if changes > 0 {
+                recordChangedTable(Record.komaTableName)
+            }
             return changes
         } catch {
             if ownsTransaction {
@@ -147,16 +153,21 @@ public extension SQLiteKomaStore {
         }
 
         let transactionID = try beginTransactionScope()
+        pendingChangedTables.removeAll(keepingCapacity: true)
         do {
             let value = try await SQLiteKomaTransactionContext.$id.withValue(transactionID) {
                 try await body(self)
             }
             try execute("COMMIT")
+            let changedTables = pendingChangedTables
+            pendingChangedTables.removeAll(keepingCapacity: true)
             endTransactionScope()
+            notifyObservers(changedTables: changedTables)
             return value
         } catch {
             try? execute("ROLLBACK")
             ensuredTables.removeAll(keepingCapacity: true)
+            pendingChangedTables.removeAll(keepingCapacity: true)
             endTransactionScope()
             throw error
         }

@@ -23,7 +23,7 @@ struct SQLiteConnection: @unchecked Sendable {
     var rawValue: OpaquePointer?
 }
 
-struct SQLiteStatementBinder: KomaSQLiteValueBinder {
+struct SQLiteStatementBinder: KomaSQLiteJSONValueBinder {
     let statement: OpaquePointer
     var index: Int32 = 1
 
@@ -36,7 +36,22 @@ struct SQLiteStatementBinder: KomaSQLiteValueBinder {
     }
 
     mutating func bind(_ value: borrowing String) throws {
-        try advance(sqlite3_bind_text(statement, index, value, -1, SQLITE_TRANSIENT))
+        if let result = value.utf8.withContiguousStorageIfAvailable({ bytes in
+            bindText(bytes)
+        }) {
+            try advance(result)
+            return
+        }
+
+        let bytes = Array(value.utf8)
+        try advance(bytes.withUnsafeBufferPointer { bindText($0) })
+    }
+
+    mutating func bind(_ value: borrowing KomaJSONText) throws {
+        let result = value.withUnsafeUTF8 { bytes in
+            bindText(bytes)
+        }
+        try advance(result)
     }
 
     mutating func bind(_ value: Bool) throws {
@@ -74,5 +89,14 @@ struct SQLiteStatementBinder: KomaSQLiteValueBinder {
             throw SQLiteKomaError.executionFailed(message)
         }
         index += 1
+    }
+
+    private func bindText(_ bytes: UnsafeBufferPointer<UInt8>) -> Int32 {
+        guard let baseAddress = bytes.baseAddress else {
+            return sqlite3_bind_text(statement, index, "", 0, SQLITE_TRANSIENT)
+        }
+        return baseAddress.withMemoryRebound(to: CChar.self, capacity: bytes.count) { pointer in
+            sqlite3_bind_text(statement, index, pointer, Int32(bytes.count), SQLITE_TRANSIENT)
+        }
     }
 }

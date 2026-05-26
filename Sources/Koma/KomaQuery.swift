@@ -37,8 +37,10 @@ public struct KomaQuery<Record: KomaEntityRecord>: Sendable {
         _ direction: KomaSortDirection = .ascending
     ) -> Self {
         var copy = self
-        let column = Record.columns[keyPath: keyPath].name
-        copy.request.order.append(KomaSortDescriptor(column: column, direction: direction))
+        let column = Record.columns[keyPath: keyPath]
+        copy.request.order.append(
+            KomaSortDescriptor(column: column.name, columnIndex: column.index, direction: direction)
+        )
         return copy
     }
 
@@ -99,6 +101,27 @@ public struct KomaQuery<Record: KomaEntityRecord>: Sendable {
     /// Executes the query and returns all matching records.
     public func fetch() async throws -> [Record] {
         try await store.fetch(request)
+    }
+
+    /// Observes this query when the underlying store supports live invalidation.
+    ///
+    /// Stores that do not support observation emit the current query result once.
+    public func observe() -> AsyncThrowingStream<[Record], Error> {
+        if let observableStore = store as? any KomaObservableStore {
+            return observableStore.observe(request)
+        }
+
+        return AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    try await continuation.yield(fetch())
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
     }
 
     /// Executes the query with `LIMIT 1`.

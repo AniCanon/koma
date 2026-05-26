@@ -13,6 +13,11 @@ public protocol KomaSQLiteValueBinder {
 }
 
 @_documentation(visibility: private)
+public protocol KomaSQLiteJSONValueBinder: KomaSQLiteValueBinder {
+    mutating func bind(_ value: borrowing KomaJSONText) throws
+}
+
+@_documentation(visibility: private)
 public extension KomaSQLiteValueBinder {
     mutating func bind(_ value: String?) throws {
         guard let value else {
@@ -83,5 +88,16 @@ public extension KomaSQLiteValueBinder {
         case let .blob(value):
             try bind(value)
         }
+    }
+}
+
+@_documentation(visibility: private)
+public extension KomaSQLiteJSONValueBinder {
+    mutating func bind(_ value: KomaJSONText?) throws {
+        guard let value else {
+            try bindNull()
+            return
+        }
+        try bind(value)
     }
 }

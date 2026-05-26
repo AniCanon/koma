@@ -145,6 +145,40 @@ struct KomaStoreIntegrationTests {
     }
 
     @Test
+    func `fused JSON upsert persists byte backed strings and nulls`() async throws {
+        let store = try await makeStore()
+        let body = Data("""
+        [
+          {
+            "id": "1",
+            "name": "Alpha",
+            "slug": "alpha",
+            "deletedAt": null
+          },
+          {
+            "id": "2",
+            "name": "Quote: \\"Koma\\"",
+            "slug": "quote",
+            "deletedAt": 123.5
+          }
+        ]
+        """.utf8)
+
+        try await store.upsertJSON(body, record: ProjectRecord.self)
+
+        let records = try await store.query(ProjectRecord.self)
+            .order(by: \.id)
+            .fetch()
+
+        #expect(ProjectRecord.komaUsesJSONFastPath)
+        #expect(ProjectRecord.komaUsesSQLiteFastPath)
+        #expect(records.map(\.id) == ["1", "2"])
+        #expect(records[0].deletedAt == nil)
+        #expect(records[1].name == "Quote: \"Koma\"")
+        #expect(records[1].deletedAt == Date(timeIntervalSinceReferenceDate: 123.5))
+    }
+
+    @Test
     func `existing databases still reconcile schema defensively`() async throws {
         let path = makeStorePath()
         var originalStore: SQLiteKomaStore? = try await SQLiteKomaStore(path: path)

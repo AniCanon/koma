@@ -225,6 +225,112 @@ struct KomaQueryWriteTests {
         #expect(outsideExists)
     }
 
+    @Test
+    func `live query observes committed writes`() async throws {
+        let store = try await makeStore()
+        let probe = ObservationProbe<[QueryWriteItemRecord]>()
+        let observation = Task {
+            for try await records in store.query(QueryWriteItemRecord.self)
+                .order(by: \.rank)
+                .observe()
+            {
+                await probe.append(records)
+            }
+        }
+
+        let initial = try await withObservationTimeout(.seconds(1)) {
+            await probe.waitForCount(1)
+        }
+        #expect(initial[0].isEmpty)
+
+        try await store.upsert([
+            QueryWriteItemRecord(id: "1", name: "Alpha", rank: 1, kind: "anime")
+        ])
+
+        let emissions = try await withObservationTimeout(.seconds(1)) {
+            await probe.waitForCount(2)
+        }
+        #expect(emissions[1].map(\.id) == ["1"])
+
+        observation.cancel()
+    }
+
+    @Test
+    func `live query coalesces transaction writes`() async throws {
+        let store = try await makeStore()
+        let probe = ObservationProbe<[QueryWriteItemRecord]>()
+        let observation = Task {
+            for try await records in store.query(QueryWriteItemRecord.self)
+                .order(by: \.rank)
+                .observe()
+            {
+                await probe.append(records)
+            }
+        }
+
+        _ = try await withObservationTimeout(.seconds(1)) {
+            await probe.waitForCount(1)
+        }
+
+        try await store.transaction { tx in
+            try await tx.upsert([
+                QueryWriteItemRecord(id: "1", name: "Alpha", rank: 1, kind: "anime")
+            ])
+            try await tx.upsert([
+                QueryWriteItemRecord(id: "2", name: "Beta", rank: 2, kind: "anime")
+            ])
+        }
+
+        let emissions = try await withObservationTimeout(.seconds(1)) {
+            await probe.waitForCount(2)
+        }
+        #expect(emissions[1].map(\.id) == ["1", "2"])
+
+        try await Task.sleep(for: .milliseconds(100))
+        let final = await probe.snapshot()
+        #expect(final.count == 2)
+
+        observation.cancel()
+    }
+
+    @Test
+    func `live query ignores rolled back transaction writes`() async throws {
+        let store = try await makeStore()
+        let probe = ObservationProbe<[QueryWriteItemRecord]>()
+        let observation = Task {
+            for try await records in store.query(QueryWriteItemRecord.self)
+                .observe()
+            {
+                await probe.append(records)
+            }
+        }
+
+        _ = try await withObservationTimeout(.seconds(1)) {
+            await probe.waitForCount(1)
+        }
+
+        do {
+            try await store.transaction { tx in
+                try await tx.upsert([
+                    QueryWriteItemRecord(id: "rollback", name: "Rollback", rank: 1, kind: "test")
+                ])
+                throw RollbackError.expected
+            }
+            Issue.record("Expected transaction to roll back.")
+        } catch RollbackError.expected {}
+
+        try await Task.sleep(for: .milliseconds(100))
+        let emissions = await probe.snapshot()
+        #expect(emissions.count == 1)
+
+        let rolledBack = try await store.query(QueryWriteItemRecord.self)
+            .where { $0.id == "rollback" }
+            .exists()
+        #expect(!rolledBack)
+
+        observation.cancel()
+    }
+
     private func makeStore() async throws -> SQLiteKomaStore {
         let url = FileManager.default
             .temporaryDirectory

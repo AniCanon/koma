@@ -217,6 +217,40 @@ struct KomaResourceClientTests {
         #expect(snapshot.lastError != nil)
     }
 
+    @Test
+    func `resource live observation refreshes through local store`() async throws {
+        let store = try await makeStore()
+        let transport = try FakeKomaTransport(responses: [
+            KomaResponse(
+                statusCode: 200,
+                body: JSONEncoder().encode([
+                    Project(id: "1", name: "Alpha", slug: "alpha", deletedAt: nil)
+                ])
+            )
+        ])
+        let koma = try KomaClient(
+            baseURL: #require(URL(string: "https://example.com/v1")),
+            store: store,
+            transport: transport
+        )
+        let probe = ObservationProbe<KomaSnapshot<[Project]>>()
+        let observation = Task {
+            for await snapshot in ProjectResources.client(in: koma)
+                .list()
+                .observe(mode: .live)
+            {
+                await probe.append(snapshot)
+            }
+        }
+
+        let emissions = try await withObservationTimeout(.seconds(1)) {
+            await probe.waitForCount(2)
+        }
+        #expect(emissions.contains { $0.value.map(\.id) == ["1"] })
+
+        observation.cancel()
+    }
+
     private func makeStore() async throws -> SQLiteKomaStore {
         try await SQLiteKomaStore(path: makeStorePath())
     }

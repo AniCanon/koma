@@ -4,8 +4,50 @@ Koma publishes small p50 snapshots in the README and keeps fuller benchmark cont
 
 | Koma Version | Environment | Swift | Artifact | Notes |
 | --- | --- | --- | --- | --- |
+| Live observation branch | Darwin 25.4.0 arm64, SwiftPM benchmark runner | Swift 6.3 release | `.benchmark-results/live-observation-final-20260525` | Final host pass for live observation, fused JSON-to-SQLite binding, generated key dispatch, and projection fast paths. Host GRDB was disabled for this run because this Swift 6.3 toolchain still fails the GRDB benchmark target in release mode. |
 | Open-source prep | Darwin 25.4.0 arm64, SwiftPM benchmark runner | Swift 6.3 release | `.benchmark-results/koma-open-source-apple-20260524` | Apple-platform baseline for the iOS-side runtime, not an on-device iOS claim. Host GRDB storage comparison was disabled for this run because this Swift 6.3 toolchain crashed while compiling the GRDB benchmark target. |
 | Open-source prep | Google sdk_gphone16k_arm64 emulator, Android 17 SDK 37 | Swift 6.3 release Android SDK | `.benchmark-results/koma-open-source-android-emulator-20260524` | Android smoke baseline with Koma, raw SQLite, GRDB, and SQLite.swift. |
+
+## Live Observation Branch
+
+Captured May 25, 2026 from `feature/live-observation`.
+
+- Command: `KOMA_DISABLE_GRDB_BENCHMARKS=1 scripts/benchmark-official.sh .benchmark-results/live-observation-final-20260525`
+- Platform: Darwin 25.4.0 arm64
+- Swift: Apple Swift 6.3
+- Artifact: `.benchmark-results/live-observation-final-20260525`
+
+### Storage
+
+| Benchmark | p50 wall clock | p50 instructions |
+| --- | ---: | ---: |
+| `koma.sqlite.batchUpsert.1k` | 1.678 ms | 24M |
+| `rawsqlite.batchUpsert.1k` | 1.953 ms | 29M |
+| `koma.sqlite.observedUpsert.1k.limit100` | 2.652 ms | 26M |
+| `koma.sqlite.fusedJSONUpsert.1k` | 2.099 ms | 30M |
+| `koma.sqlite.filteredOrderedFetch.10k.limit100` | 8.360 ms | 182M |
+| `rawsqlite.filteredOrderedFetch.10k.limit100` | 10.000 ms | 226M |
+| `coredata.sqlite.batchInsert.1k` | 16.000 ms | 116M |
+| `coredata.sqlite.filteredOrderedFetch.10k.limit100` | 102.000 ms | 1000M |
+| `swiftdata.sqlite.insert.1k` | 128.000 ms | 999M |
+| `swiftdata.sqlite.filteredOrderedFetch.10k.limit100` | 854.000 ms | 9924M |
+
+### JSON and Resource Pipeline
+
+| Benchmark | p50 wall clock | p50 instructions |
+| --- | ---: | ---: |
+| `network.koma.json.records.decode.1k` | 0.409 ms | 6.3M |
+| `network.foundation.jsondecoder.decode.1k` | 2.839 ms | 39M |
+| `network.yyjson.decoder.decode.1k` | 0.874 ms | 14M |
+| `network.koma.json.records.encode.1k` | 0.594 ms | 10.0M |
+| `network.foundation.jsonencoder.encode.1k` | 2.288 ms | 29M |
+| `network.yyjson.encoder.encode.1k` | 0.391 ms | 12M |
+| `koma.resource.networkFirstFallback.1k` | 2.320 ms | 44M |
+| `network.koma.resource.urlsession.networkFirstFallback.1k` | 4.334 ms | 46M |
+| `network.koma.transport.get.decode.1k` | 2.621 ms | 41M |
+| `network.alamofire.get.decode.1k` | 3.400 ms | 41M |
+| `network.moya.get.decode.1k` | 3.125 ms | 41M |
+| `network.apollo.query.networkOnly.1k` | 85.000 ms | 1016M |
 
 ## Open-Source Prep Baseline
 

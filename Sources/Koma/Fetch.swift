@@ -33,8 +33,10 @@ public struct KomaFetch<Output: Decodable & Sendable, Record: KomaRemoteRecord>:
         _ direction: KomaSortDirection = .ascending
     ) -> Self {
         var copy = self
-        let column = Record.columns[keyPath: keyPath].name
-        copy.queryRequest.order.append(KomaSortDescriptor(column: column, direction: direction))
+        let column = Record.columns[keyPath: keyPath]
+        copy.queryRequest.order.append(
+            KomaSortDescriptor(column: column.name, columnIndex: column.index, direction: direction)
+        )
         return copy
     }
 
@@ -67,7 +69,7 @@ public struct KomaFetch<Output: Decodable & Sendable, Record: KomaRemoteRecord>:
 
         case .networkFirstFallback:
             do {
-                let refreshed = try await refreshPayload()
+                let refreshed = try await refreshPayload(needsOutput: false)
                 if let refreshedSnapshot = try snapshotFromRefreshedRecords(refreshed.records) {
                     snapshot = refreshedSnapshot
                 } else {
@@ -87,7 +89,7 @@ public struct KomaFetch<Output: Decodable & Sendable, Record: KomaRemoteRecord>:
                 snapshot = local
                 break
             }
-            let refreshed = try await refreshPayload()
+            let refreshed = try await refreshPayload(needsOutput: false)
             if let refreshedSnapshot = try snapshotFromRefreshedRecords(refreshed.records) {
                 snapshot = refreshedSnapshot
             } else {
@@ -101,7 +103,19 @@ public struct KomaFetch<Output: Decodable & Sendable, Record: KomaRemoteRecord>:
         return snapshot
     }
 
-    public func observe(policy: KomaFetchPolicy = .localThenRefresh) -> AsyncStream<KomaSnapshot<Output>> {
+    public func observe(
+        policy: KomaFetchPolicy = .localThenRefresh,
+        mode: KomaObservationMode = .once
+    ) -> AsyncStream<KomaSnapshot<Output>> {
+        switch mode {
+        case .once:
+            observeOnce(policy: policy)
+        case .live:
+            observeLive(policy: policy)
+        }
+    }
+
+    private func observeOnce(policy: KomaFetchPolicy) -> AsyncStream<KomaSnapshot<Output>> {
         AsyncStream { continuation in
             let task = Task {
                 do {
@@ -116,7 +130,7 @@ public struct KomaFetch<Output: Decodable & Sendable, Record: KomaRemoteRecord>:
                     }
 
                     do {
-                        try await refresh()
+                        _ = try await refreshPayload(needsOutput: false, needsRecords: false)
                         try await continuation.yield(read(source: .network))
                     } catch {
                         try await continuation.yield(read(source: .fallback, lastError: error))
@@ -130,8 +144,81 @@ public struct KomaFetch<Output: Decodable & Sendable, Record: KomaRemoteRecord>:
         }
     }
 
+    private func observeLive(policy: KomaFetchPolicy) -> AsyncStream<KomaSnapshot<Output>> {
+        guard let observableStore = client.store as? any KomaObservableStore else {
+            return observeOnce(policy: policy)
+        }
+
+        return AsyncStream { continuation in
+            let records = observableStore.observe(queryRequest)
+            let firstEmission = AsyncStream.makeStream(
+                of: Void.self,
+                bufferingPolicy: .bufferingNewest(1)
+            )
+            let observationTask = Task {
+                do {
+                    var isFirstEmission = true
+                    for try await records in records {
+                        let shouldSignalFirstEmission = isFirstEmission
+                        let output: Output = try KomaDefaultRemoteMapper.output(records, as: Output.self)
+                        continuation.yield(
+                            snapshot(
+                                value: output,
+                                source: .local,
+                                isRefreshing: isFirstEmission && policy != .localOnly
+                            )
+                        )
+                        isFirstEmission = false
+                        if shouldSignalFirstEmission {
+                            firstEmission.continuation.yield(())
+                            firstEmission.continuation.finish()
+                        }
+                    }
+                    firstEmission.continuation.finish()
+                    continuation.finish()
+                } catch {
+                    firstEmission.continuation.finish()
+                    continuation.finish()
+                }
+            }
+
+            let refreshTask = Task {
+                guard policy != .localOnly else {
+                    return
+                }
+
+                var didObserveFirstEmission = false
+                for await _ in firstEmission.stream {
+                    didObserveFirstEmission = true
+                    break
+                }
+                guard didObserveFirstEmission else {
+                    return
+                }
+                try Task.checkCancellation()
+
+                do {
+                    _ = try await refreshPayload(needsOutput: false, needsRecords: false)
+                } catch {
+                    if let fallback = try? await read(source: .fallback, lastError: error) {
+                        continuation.yield(fallback)
+                    }
+                }
+            }
+
+            continuation.onTermination = { _ in
+                firstEmission.continuation.finish()
+                observationTask.cancel()
+                refreshTask.cancel()
+            }
+        }
+    }
+
     @discardableResult
     public func refresh() async throws -> Output {
-        try await refreshPayload().output
+        guard let output = try await refreshPayload(needsOutput: true).output else {
+            throw KomaMappingError.unsupportedOutput(String(describing: Output.self))
+        }
+        return output
     }
 }

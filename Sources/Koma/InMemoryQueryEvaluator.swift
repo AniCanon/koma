@@ -13,31 +13,52 @@ enum KomaInMemoryQueryEvaluator {
             return records
         }
 
-        let columns = Dictionary(uniqueKeysWithValues: Record.komaColumns.enumerated().map { ($0.element.name, $0.offset) })
-        var projected: [ProjectedRecord<Record>] = []
+        let projectedColumns = try projectedColumns(for: request)
+
+        if projectedColumns.sourceIndexes.isEmpty,
+           request.predicate == nil,
+           request.order.isEmpty
+        {
+            return Array(page(records, offset: request.offset, limit: request.limit))
+        }
+
+        var projected: [KomaProjectedRecord<Record>] = []
         projected.reserveCapacity(records.count)
 
         for record in records {
-            guard let fastRecord = record as? any KomaSQLiteFastPathRecord else {
-                return records
+            let values: KomaProjectedValues
+            if projectedColumns.sourceIndexes.isEmpty {
+                values = KomaProjectedValues()
+            } else {
+                guard let fastRecord = record as? any KomaSQLiteFastPathRecord else {
+                    return records
+                }
+                values = KomaProjectedValues(sourceIndexes: projectedColumns.sourceIndexes, record: fastRecord)
             }
-            var values: [KomaSQLiteStorageValue] = []
-            values.reserveCapacity(Record.komaColumns.count)
-            fastRecord.komaSQLiteValues(into: &values)
-            projected.append(ProjectedRecord(record: record, values: values))
+            projected.append(
+                KomaProjectedRecord(
+                    record: record,
+                    values: values
+                )
+            )
         }
 
         if let predicate = request.predicate {
-            projected = try projected.filter { try Self.matches(predicate, values: $0.values, columns: columns) }
+            projected = try projected.filter { try Self.matches(predicate, values: $0.values, columns: projectedColumns) }
         }
 
         if !request.order.isEmpty {
             projected.sort { lhs, rhs in
                 for descriptor in request.order {
-                    guard let index = columns[descriptor.column] else {
+                    guard let index = projectedColumns.projectedIndex(for: descriptor) else {
                         continue
                     }
-                    let comparison = Self.compare(lhs.values[index], rhs.values[index])
+                    guard let lhsValue = lhs.values.value(at: index),
+                          let rhsValue = rhs.values.value(at: index)
+                    else {
+                        continue
+                    }
+                    let comparison = Self.compare(lhsValue, rhsValue)
                     guard comparison != .orderedSame else {
                         continue
                     }
@@ -62,10 +83,79 @@ enum KomaInMemoryQueryEvaluator {
         return projected[offset ..< end].map(\.record)
     }
 
+    private static func page<Record>(
+        _ records: borrowing [Record],
+        offset requestedOffset: Int?,
+        limit requestedLimit: Int?
+    ) -> ArraySlice<Record> {
+        let offset = min(requestedOffset ?? 0, records.count)
+        let end: Int = if let requestedLimit {
+            min(offset + requestedLimit, records.count)
+        } else {
+            records.count
+        }
+        return records[offset ..< end]
+    }
+
+    private static func projectedColumns<Record: KomaEntityRecord>(
+        for request: borrowing KomaQueryRequest<Record>
+    ) throws -> KomaProjectedColumns {
+        var projectedColumns = KomaProjectedColumns()
+        var columnsByName: [String: Int]?
+
+        if let predicate = request.predicate {
+            try collectColumns(
+                from: predicate,
+                record: Record.self,
+                projectedColumns: &projectedColumns,
+                columnsByName: &columnsByName
+            )
+        }
+        for descriptor in request.order {
+            try projectedColumns.append(
+                column: descriptor.column,
+                columnIndex: descriptor.columnIndex,
+                record: Record.self,
+                columnsByName: &columnsByName
+            )
+        }
+        return projectedColumns
+    }
+
+    private static func collectColumns(
+        from predicate: KomaPredicate,
+        record: (some KomaEntityRecord).Type,
+        projectedColumns: inout KomaProjectedColumns,
+        columnsByName: inout [String: Int]?
+    ) throws {
+        if predicate.column != nil || predicate.columnIndex != nil {
+            try projectedColumns.append(
+                column: predicate.column,
+                columnIndex: predicate.columnIndex,
+                record: record,
+                columnsByName: &columnsByName
+            )
+        }
+
+        switch predicate.operation {
+        case let .and(predicates), let .or(predicates):
+            for predicate in predicates {
+                try collectColumns(
+                    from: predicate,
+                    record: record,
+                    projectedColumns: &projectedColumns,
+                    columnsByName: &columnsByName
+                )
+            }
+        default:
+            break
+        }
+    }
+
     private static func matches(
         _ predicate: KomaPredicate,
-        values: borrowing [KomaSQLiteStorageValue],
-        columns: borrowing [String: Int]
+        values: borrowing KomaProjectedValues,
+        columns: borrowing KomaProjectedColumns
     ) throws -> Bool {
         switch predicate.operation {
         case .isNull:
@@ -117,16 +207,15 @@ enum KomaInMemoryQueryEvaluator {
 
     private static func value(
         for predicate: KomaPredicate,
-        values: borrowing [KomaSQLiteStorageValue],
-        columns: borrowing [String: Int]
+        values: borrowing KomaProjectedValues,
+        columns: borrowing KomaProjectedColumns
     ) throws -> KomaSQLiteStorageValue {
-        guard let column = predicate.column,
-              let index = columns[column],
-              values.indices.contains(index)
+        guard let index = columns.projectedIndex(for: predicate),
+              let value = values.value(at: index)
         else {
             throw KomaMappingError.unsupportedOutput("Cannot evaluate predicate in memory.")
         }
-        return values[index]
+        return value
     }
 
     private static func equals(_ stored: KomaSQLiteStorageValue, _ expected: KomaValue) -> Bool {
@@ -136,7 +225,7 @@ enum KomaInMemoryQueryEvaluator {
     private static func compare(_ lhs: KomaSQLiteStorageValue, _ rhs: KomaValue) -> ComparisonResult {
         switch (lhs, rhs) {
         case let (.text(lhs), .string(rhs)):
-            return lhs.compare(rhs)
+            return compareText(lhs, rhs)
         case let (.integer(lhs), .int(rhs)):
             return Self.compare(lhs, rhs)
         case let (.real(lhs), .double(rhs)):
@@ -163,7 +252,7 @@ enum KomaInMemoryQueryEvaluator {
         case (_, .null):
             return .orderedDescending
         case let (.text(lhs), .text(rhs)):
-            return lhs.compare(rhs)
+            return compareText(lhs, rhs)
         case let (.integer(lhs), .integer(rhs)):
             return Self.compare(lhs, rhs)
         case let (.real(lhs), .real(rhs)):
@@ -187,6 +276,28 @@ enum KomaInMemoryQueryEvaluator {
         return .orderedSame
     }
 
+    private static func compareText(_ lhs: String, _ rhs: String) -> ComparisonResult {
+        var lhs = lhs
+        var rhs = rhs
+        return lhs.withUTF8 { lhsBytes in
+            rhs.withUTF8 { rhsBytes in
+                let count = min(lhsBytes.count, rhsBytes.count)
+                for index in 0 ..< count {
+                    let left = lhsBytes[index]
+                    let right = rhsBytes[index]
+                    if left < right {
+                        return .orderedAscending
+                    }
+                    if left > right {
+                        return .orderedDescending
+                    }
+                }
+
+                return compare(lhsBytes.count, rhsBytes.count)
+            }
+        }
+    }
+
     private static func matchesLike(_ text: String, pattern: String) -> Bool {
         if pattern.hasPrefix("%"), pattern.hasSuffix("%") {
             return text.contains(pattern.dropFirst().dropLast())
@@ -199,9 +310,118 @@ enum KomaInMemoryQueryEvaluator {
         }
         return text == pattern
     }
+}
 
-    private struct ProjectedRecord<Record> {
-        let record: Record
-        let values: [KomaSQLiteStorageValue]
+private struct KomaProjectedRecord<Record> {
+    let record: Record
+    let values: KomaProjectedValues
+}
+
+private struct KomaProjectedValues {
+    private let first: KomaSQLiteStorageValue
+    private let second: KomaSQLiteStorageValue
+    private let remaining: [KomaSQLiteStorageValue]
+
+    init() {
+        first = .null
+        second = .null
+        remaining = []
+    }
+
+    init(sourceIndexes: borrowing[Int], record: any KomaSQLiteFastPathRecord) {
+        first = sourceIndexes.indices.contains(0) ? record.komaSQLiteValue(at: sourceIndexes[0]) : .null
+        second = sourceIndexes.indices.contains(1) ? record.komaSQLiteValue(at: sourceIndexes[1]) : .null
+
+        guard sourceIndexes.count > 2 else {
+            remaining = []
+            return
+        }
+
+        var remaining: [KomaSQLiteStorageValue] = []
+        remaining.reserveCapacity(sourceIndexes.count - 2)
+        for index in 2 ..< sourceIndexes.count {
+            remaining.append(record.komaSQLiteValue(at: sourceIndexes[index]))
+        }
+        self.remaining = remaining
+    }
+
+    func value(at index: Int) -> KomaSQLiteStorageValue? {
+        switch index {
+        case 0:
+            first
+        case 1:
+            second
+        default:
+            remaining.indices.contains(index - 2) ? remaining[index - 2] : nil
+        }
+    }
+}
+
+private struct KomaProjectedColumns {
+    var sourceIndexes: [Int] = []
+    private var names: [String?] = []
+
+    mutating func append(
+        column: String?,
+        columnIndex: Int?,
+        record: (some KomaEntityRecord).Type,
+        columnsByName: inout [String: Int]?
+    ) throws {
+        let sourceIndex: Int
+        if let columnIndex {
+            sourceIndex = columnIndex
+        } else if let column {
+            sourceIndex = try Self.columnIndex(column, record: record, columnsByName: &columnsByName)
+        } else {
+            return
+        }
+
+        if let projectedIndex = sourceIndexes.firstIndex(of: sourceIndex) {
+            if names[projectedIndex] == nil, let column {
+                names[projectedIndex] = column
+            }
+            return
+        }
+
+        sourceIndexes.append(sourceIndex)
+        names.append(column)
+    }
+
+    func projectedIndex(for predicate: KomaPredicate) -> Int? {
+        if let sourceIndex = predicate.columnIndex,
+           let projectedIndex = sourceIndexes.firstIndex(of: sourceIndex)
+        {
+            return projectedIndex
+        }
+
+        guard let column = predicate.column else {
+            return nil
+        }
+        return names.firstIndex { $0 == column }
+    }
+
+    func projectedIndex(for descriptor: KomaSortDescriptor) -> Int? {
+        if let sourceIndex = descriptor.columnIndex,
+           let projectedIndex = sourceIndexes.firstIndex(of: sourceIndex)
+        {
+            return projectedIndex
+        }
+        return names.firstIndex { $0 == descriptor.column }
+    }
+
+    private static func columnIndex<Record: KomaEntityRecord>(
+        _ column: String,
+        record: Record.Type,
+        columnsByName: inout [String: Int]?
+    ) throws -> Int {
+        if columnsByName == nil {
+            columnsByName = Dictionary(
+                uniqueKeysWithValues: Record.komaColumns.enumerated().map { ($0.element.name, $0.offset) }
+            )
+        }
+        guard let index = columnsByName?[column] else {
+            throw KomaMappingError.unsupportedOutput("Cannot evaluate query column \(column) in memory.")
+        }
+        return index
     }
 }
