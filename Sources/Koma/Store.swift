@@ -22,7 +22,7 @@ public protocol KomaObservableStore: KomaStore {
 /// Store-private extension point for persisting macro-scanned JSON without materializing record arrays.
 @_documentation(visibility: private)
 public protocol KomaFusedJSONStore: KomaStore {
-    func upsertJSON<Record: KomaFusedJSONRecord>(_ data: Data, record: Record.Type) async throws
+    func upsertJSON(_ data: Data, record: (some KomaFusedJSONRecord).Type) async throws
 }
 
 public extension KomaObservableStore {

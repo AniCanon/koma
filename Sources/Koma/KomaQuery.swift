@@ -114,7 +114,7 @@ public struct KomaQuery<Record: KomaEntityRecord>: Sendable {
         return AsyncThrowingStream { continuation in
             let task = Task {
                 do {
-                    continuation.yield(try await fetch())
+                    try await continuation.yield(fetch())
                     continuation.finish()
                 } catch {
                     continuation.finish(throwing: error)

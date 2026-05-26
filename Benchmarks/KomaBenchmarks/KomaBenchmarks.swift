@@ -106,7 +106,7 @@ let benchmarks: @Sendable () -> Void = {
         }
 
         observation.cancel()
-        blackHole(await sink.latestCount())
+        await blackHole(sink.latestCount())
     }
 
     Benchmark("rawsqlite.batchUpsert.1k") { benchmark in

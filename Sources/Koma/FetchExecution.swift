@@ -156,9 +156,9 @@ extension KomaFetch {
         return record
     }
 
-    private func upsertFusedJSON<FusedRecord: KomaFusedJSONRecord>(
+    private func upsertFusedJSON(
         _ data: Data,
-        record: FusedRecord.Type,
+        record: (some KomaFusedJSONRecord).Type,
         store: any KomaFusedJSONStore
     ) async throws {
         try await store.upsertJSON(data, record: record)

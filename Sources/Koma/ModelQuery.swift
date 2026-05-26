@@ -162,7 +162,7 @@ public struct KomaModelQuery<Model: KomaModel>: @unchecked Sendable {
                 let task = Task {
                     do {
                         for try await records in records {
-                            continuation.yield(try await models(from: records))
+                            try await continuation.yield(models(from: records))
                         }
                         continuation.finish()
                     } catch {
@@ -176,7 +176,7 @@ public struct KomaModelQuery<Model: KomaModel>: @unchecked Sendable {
         return AsyncThrowingStream { continuation in
             let task = Task {
                 do {
-                    continuation.yield(try await fetch())
+                    try await continuation.yield(fetch())
                     continuation.finish()
                 } catch {
                     continuation.finish(throwing: error)

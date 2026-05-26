@@ -1,7 +1,7 @@
 import Foundation
 import Koma
 
-struct SQLiteKomaStoreObservation: Sendable {
+struct SQLiteKomaStoreObservation {
     let tables: Set<String>
     let notify: @Sendable () -> Void
 }
@@ -27,7 +27,7 @@ extension SQLiteKomaStore: KomaObservableStore {
 
                     for await _ in signals.stream {
                         try Task.checkCancellation()
-                        continuation.yield(try await fetch(request))
+                        try await continuation.yield(fetch(request))
                     }
                     continuation.finish()
                 } catch {

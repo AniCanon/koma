@@ -31,7 +31,8 @@ extension KomaEntityMacro {
             """
             public func komaSQLiteValue(at index: Int) -> KomaSQLiteStorageValue {
                 switch index {
-                \(raw: properties.enumerated().map { "case \($0.offset): KomaSQLiteStorageValue(self.\($0.element.name))" }.joined(separator: "\n        "))
+                \(raw: properties.enumerated().map { "case \($0.offset): KomaSQLiteStorageValue(self.\($0.element.name))" }
+                .joined(separator: "\n        "))
                 default: preconditionFailure("Invalid Koma SQLite column index.")
                 }
             }
@@ -74,25 +75,11 @@ extension KomaEntityMacro {
         let jsonArguments = properties
             .map { "_komaJSON_\($0.name): \($0.name)" }
             .joined(separator: ", ")
-        let jsonAssignments = properties
-            .map {
-                if $0.isOptional {
-                    return "self.\($0.name) = \($0.name)"
-                }
-                return "self.\($0.name) = try komaJSONRequire(\($0.name), \"\($0.name)\")"
-            }
-            .joined(separator: "\n        ")
+        let jsonAssignments = Self.jsonAssignments(for: properties)
         let encodeFields = properties
             .map { "try writer.writeField(\"\($0.name)\", self.\($0.name), isFirst: &isFirst)" }
             .joined(separator: "\n        ")
-        let bindFields = properties
-            .map {
-                if $0.isOptional {
-                    return "try binder.bind(\($0.name))"
-                }
-                return "try binder.bind(try komaJSONRequire(\($0.name), \"\($0.name)\"))"
-            }
-            .joined(separator: "\n            ")
+        let bindFields = Self.jsonSQLiteBindFields(for: properties)
         let estimatedBytesPerRecord = Self.jsonEstimatedBytesPerRecord(for: properties)
 
         return [
@@ -187,6 +174,28 @@ extension KomaEntityMacro {
         ]
     }
 
+    private static func jsonAssignments(for properties: [EntityProperty]) -> String {
+        properties
+            .map {
+                if $0.isOptional {
+                    return "self.\($0.name) = \($0.name)"
+                }
+                return "self.\($0.name) = try komaJSONRequire(\($0.name), \"\($0.name)\")"
+            }
+            .joined(separator: "\n        ")
+    }
+
+    private static func jsonSQLiteBindFields(for properties: [EntityProperty]) -> String {
+        properties
+            .map {
+                if $0.isOptional {
+                    return "try binder.bind(\($0.name))"
+                }
+                return "try binder.bind(try komaJSONRequire(\($0.name), \"\($0.name)\"))"
+            }
+            .joined(separator: "\n            ")
+    }
+
     private static func sqliteDecodeExpression(for property: EntityProperty, at index: Int) -> String {
         let optional = property.isOptional
         let type = property.unwrappedType
@@ -218,7 +227,7 @@ extension KomaEntityMacro {
         if property.baseType == "String" {
             return "KomaJSONText?"
         }
-        return Self.jsonTemporaryType(for: property)
+        return jsonTemporaryType(for: property)
     }
 
     private static func jsonDecodeExpression(for property: EntityProperty) -> String {
@@ -248,7 +257,7 @@ extension KomaEntityMacro {
         if property.baseType == "String" {
             return property.isOptional ? "readOptionalText()" : "readText()"
         }
-        return Self.jsonDecodeExpression(for: property)
+        return jsonDecodeExpression(for: property)
     }
 
     private static func jsonEstimatedBytesPerRecord(for properties: [EntityProperty]) -> Int {
@@ -305,11 +314,13 @@ extension KomaEntityMacro {
                 .map { index, property in
                     let prefix = index == 0 ? "if" : "else if"
                     let bytes = Array(property.name.utf8)
+                    let byteCount = bytes.count
                     let firstByte = bytes.first ?? 0
-                    let secondByte = bytes.count > 1 ? bytes[1] : 0
+                    let secondByte = byteCount > 1 ? bytes[1] : 0
                     let lastByte = bytes.last ?? 0
                     return """
-                    \(prefix) key.matches("\(property.name)", count: \(bytes.count), firstByte: \(firstByte), secondByte: \(secondByte), lastByte: \(lastByte)) {
+                    \(prefix) key.matches("\(property
+                        .name)", count: \(byteCount), firstByte: \(firstByte), secondByte: \(secondByte), lastByte: \(lastByte)) {
                                 \(property.name) = try scanner.\(decodeExpression(property))
                             }
                     """

@@ -138,7 +138,7 @@ extension KomaJSONScanner {
             var readExponentDigit = false
             while let byte = peek(), byte >= 48, byte <= 57 {
                 readExponentDigit = true
-                if exponent < 10_000 {
+                if exponent < 10000 {
                     exponent = exponent * 10 + Int(byte - 48)
                 }
                 offset += 1
