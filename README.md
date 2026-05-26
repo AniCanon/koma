@@ -298,7 +298,7 @@ Read policies:
 ## SwiftPM
 
 ```swift
-.package(url: "https://github.com/AniCanon/koma.git", from: "0.1.0")
+.package(url: "https://github.com/AniCanon/koma.git", from: "0.2.0")
 ```
 
 Storage-only:

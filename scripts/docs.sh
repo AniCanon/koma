@@ -23,6 +23,6 @@ mkdir -p .build/docc-check
 docc convert docs/Koma.docc \
   --fallback-display-name Koma \
   --fallback-bundle-identifier org.anicanon.koma \
-  --fallback-bundle-version 0.1.0 \
+  --fallback-bundle-version 0.2.0 \
   --additional-symbol-graph-dir "$SYMBOLGRAPH_DIR" \
   --output-dir .build/docc-check/Koma
