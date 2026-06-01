@@ -3,6 +3,23 @@ import Koma
 import KomaMacros
 import Testing
 
+@KomaEntity(table: "json_integer_widths")
+struct JSONIntegerWidthsRecord: KomaEntityRecord, Equatable {
+    @KomaPrimaryKey var id: String
+    var i8: Int8
+    var i16: Int16
+    var i32: Int32
+    var i64: Int64
+
+    init(id: String, i8: Int8, i16: Int16, i32: Int32, i64: Int64) {
+        self.id = id
+        self.i8 = i8
+        self.i16 = i16
+        self.i32 = i32
+        self.i64 = i64
+    }
+}
+
 /// Boundary coverage for the JSON scanner hot loops (whitespace skipping, string-body
 /// scanning, number parsing). The string scan skips whole machine words at a time (8-byte
 /// SWAR), so these sweeps land a special byte (quote, backslash) or a multibyte UTF-8
@@ -91,5 +108,50 @@ struct KomaJSONScannerBoundaryTests {
     func `signed integers round trip across the digit-scan loop`(rank: Int) throws {
         let decoded = try JSONProjectRecord.komaJSONRecord(from: projectJSON(name: "Alpha", rank: rank))
         #expect(decoded.rank == rank)
+    }
+
+    @Test
+    func `integer fields of every width round trip at their bounds`() throws {
+        let body = Data(
+            #"{"id":"1","i8":-128,"i16":32767,"i32":-2147483648,"i64":9223372036854775807}"#.utf8
+        )
+        let decoded = try JSONIntegerWidthsRecord.komaJSONRecord(from: body)
+        #expect(JSONIntegerWidthsRecord.komaUsesJSONFastPath)
+        #expect(decoded == JSONIntegerWidthsRecord(
+            id: "1",
+            i8: -128,
+            i16: 32767,
+            i32: -2_147_483_648,
+            i64: 9_223_372_036_854_775_807
+        ))
+    }
+
+    @Test
+    func `integer overflow is rejected per field width`() throws {
+        // 200 fits Int but overflows Int8 — the per-width Value(exactly:) check must still fire.
+        let body = Data(#"{"id":"1","i8":200,"i16":1,"i32":1,"i64":1}"#.utf8)
+        #expect(throws: KomaJSONFastPathError.self) {
+            try JSONIntegerWidthsRecord.komaJSONRecord(from: body)
+        }
+    }
+
+    @Test
+    func `non-ascii string values decode intact`() throws {
+        // Accented + CJK + emoji: every byte has the high bit set, so the validating path
+        // must be used and the value preserved exactly.
+        let name = "café — 日本語 😀"
+        let decoded = try JSONProjectRecord.komaJSONRecord(from: projectJSON(name: name))
+        #expect(decoded.name == name)
+    }
+
+    @Test
+    func `invalid utf8 inside a string is still repaired`() throws {
+        // A lone 0xFF is invalid UTF-8. Today String(decoding:) repairs it to U+FFFD; the
+        // ASCII fast path must not change that — non-ASCII bytes take the validating path.
+        var bytes = Array(#"{"id":"1","name":""#.utf8)
+        bytes.append(0xFF)
+        bytes.append(contentsOf: #"","rank":1}"#.utf8)
+        let decoded = try JSONProjectRecord.komaJSONRecord(from: Data(bytes))
+        #expect(decoded.name == "\u{FFFD}")
     }
 }
