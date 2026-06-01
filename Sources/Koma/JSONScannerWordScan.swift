@@ -78,6 +78,13 @@ extension KomaJSONScanner {
         guard count > 0, let base = buffer.baseAddress else {
             return ""
         }
+        // Tripwire: independently re-verify the caller's ASCII claim. Compiled out in
+        // release, so the fast path keeps its cost, but a future mis-tracking of `isASCII`
+        // fails loudly in tests instead of silently producing a malformed String.
+        assert(
+            (start ..< end).allSatisfy { buffer[$0] & 0x80 == 0 },
+            "makeASCIIString requires pure-ASCII bytes; isASCII tracking is broken"
+        )
         return String(unsafeUninitializedCapacity: count) { destination in
             destination.baseAddress!.initialize(from: base + start, count: count)
             return count
