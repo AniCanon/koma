@@ -94,60 +94,36 @@ public struct KomaJSONScanner {
         try expect(.quote)
         let start = offset
 
-        while offset < buffer.count {
-            let byte = buffer[offset]
-            if byte == JSONByte.quote.rawValue {
-                let end = offset
-                offset += 1
-                return String(decoding: buffer[start ..< end], as: UTF8.self)
-            }
-            if byte == JSONByte.backslash.rawValue {
-                return try readEscapedString(start: start)
-            }
+        if try skipToStringDelimiter() == JSONByte.quote.rawValue {
+            let end = offset
             offset += 1
+            return String(decoding: buffer[start ..< end], as: UTF8.self)
         }
-
-        throw KomaJSONFastPathError.unexpectedEnd
+        return try readEscapedString(start: start)
     }
 
     public mutating func readText() throws -> KomaJSONText {
         try expect(.quote)
         let start = offset
 
-        while offset < buffer.count {
-            let byte = buffer[offset]
-            if byte == JSONByte.quote.rawValue {
-                let end = offset
-                offset += 1
-                return KomaJSONText(buffer: buffer, range: start ..< end)
-            }
-            if byte == JSONByte.backslash.rawValue {
-                return try KomaJSONText(stringValue: readEscapedString(start: start))
-            }
+        if try skipToStringDelimiter() == JSONByte.quote.rawValue {
+            let end = offset
             offset += 1
+            return KomaJSONText(buffer: buffer, range: start ..< end)
         }
-
-        throw KomaJSONFastPathError.unexpectedEnd
+        return try KomaJSONText(stringValue: readEscapedString(start: start))
     }
 
     public mutating func readKey() throws -> KomaJSONKey {
         try expect(.quote)
         let start = offset
 
-        while offset < buffer.count {
-            let byte = buffer[offset]
-            if byte == JSONByte.quote.rawValue {
-                let end = offset
-                offset += 1
-                return KomaJSONKey(buffer: buffer, range: start ..< end)
-            }
-            if byte == JSONByte.backslash.rawValue {
-                return try KomaJSONKey(stringValue: readEscapedString(start: start))
-            }
+        if try skipToStringDelimiter() == JSONByte.quote.rawValue {
+            let end = offset
             offset += 1
+            return KomaJSONKey(buffer: buffer, range: start ..< end)
         }
-
-        throw KomaJSONFastPathError.unexpectedEnd
+        return try KomaJSONKey(stringValue: readEscapedString(start: start))
     }
 
     public mutating func readOptionalString() throws -> String? {

@@ -3,11 +3,11 @@ import Koma
 import KomaMacros
 import Testing
 
-// Boundary coverage for the JSON scanner hot loops (whitespace skipping, string-body
-// scanning, number parsing). These exercise inputs that straddle the 16-byte stride the
-// SIMD fast paths use, so a special byte (quote, backslash) or a multibyte UTF-8 sequence
-// lands at every lane position relative to a chunk. They are written against the current
-// scalar scanner and must keep passing after the SIMD rework.
+/// Boundary coverage for the JSON scanner hot loops (whitespace skipping, string-body
+/// scanning, number parsing). The string scan skips whole machine words at a time (8-byte
+/// SWAR), so these sweeps land a special byte (quote, backslash) or a multibyte UTF-8
+/// sequence at every position relative to an 8- and 16-byte word boundary. They passed
+/// against the scalar scanner and must keep passing after the word-scan rework.
 struct KomaJSONScannerBoundaryTests {
     private func projectJSON(name: String, rank: Int = 1) -> Data {
         let escaped = name
@@ -41,7 +41,7 @@ struct KomaJSONScannerBoundaryTests {
 
     @Test(arguments: 0 ... 34)
     func `multibyte UTF-8 straddling a chunk boundary decodes intact`(prefix: Int) throws {
-        // The emoji is 4 UTF-8 bytes; sweeping the prefix makes it cross offset 16 at some point.
+        // The emoji is 4 UTF-8 bytes; sweeping the prefix makes it cross a word boundary at some point.
         let name = String(repeating: "a", count: prefix) + "😀" + "z"
         let decoded = try JSONProjectRecord.komaJSONRecord(from: projectJSON(name: name))
         #expect(decoded.name == name)
@@ -78,7 +78,8 @@ struct KomaJSONScannerBoundaryTests {
         // visits is Int64; rating/progress are floating point; no trailing whitespace so the
         // final number butts against end-of-buffer.
         let body = Data(
-            #"{"id":"1","isActive":true,"visits":9223372036854775807,"rating":123456.7890123,"progress":0.5,"createdAt":1000000000.25}"#.utf8
+            #"{"id":"1","isActive":true,"visits":9223372036854775807,"rating":123456.7890123,"progress":0.5,"createdAt":1000000000.25}"#
+                .utf8
         )
         let decoded = try JSONCommonScalarRecord.komaJSONRecord(from: body)
         #expect(decoded.visits == 9_223_372_036_854_775_807)

@@ -10,7 +10,11 @@ extension KomaJSONScanner {
 
         var value: Int64 = 0
         var readDigit = false
-        while let byte = peek(), byte >= 48, byte <= 57 {
+        while offset < buffer.count {
+            let byte = buffer[offset]
+            guard byte >= 48, byte <= 57 else {
+                break
+            }
             readDigit = true
             value = value * 10 + Int64(byte - 48)
             offset += 1
@@ -33,13 +37,21 @@ extension KomaJSONScanner {
         }
 
         var readDigit = false
-        while let byte = peek(), byte >= 48, byte <= 57 {
+        while offset < buffer.count {
+            let byte = buffer[offset]
+            guard byte >= 48, byte <= 57 else {
+                break
+            }
             readDigit = true
             offset += 1
         }
         if peek() == JSONByte.period.rawValue {
             offset += 1
-            while let byte = peek(), byte >= 48, byte <= 57 {
+            while offset < buffer.count {
+                let byte = buffer[offset]
+                guard byte >= 48, byte <= 57 else {
+                    break
+                }
                 readDigit = true
                 offset += 1
             }
@@ -50,7 +62,11 @@ extension KomaJSONScanner {
                 offset += 1
             }
             var readExponentDigit = false
-            while let byte = peek(), byte >= 48, byte <= 57 {
+            while offset < buffer.count {
+                let byte = buffer[offset]
+                guard byte >= 48, byte <= 57 else {
+                    break
+                }
                 readExponentDigit = true
                 offset += 1
             }
@@ -103,7 +119,11 @@ extension KomaJSONScanner {
         }
 
         var readIntegerDigit = false
-        while let byte = peek(), byte >= 48, byte <= 57 {
+        while offset < buffer.count {
+            let byte = buffer[offset]
+            guard byte >= 48, byte <= 57 else {
+                break
+            }
             readIntegerDigit = true
             appendDigit(byte - 48, isInteger: true)
             offset += 1
@@ -112,7 +132,11 @@ extension KomaJSONScanner {
         if peek() == JSONByte.period.rawValue {
             offset += 1
             var readFractionDigit = false
-            while let byte = peek(), byte >= 48, byte <= 57 {
+            while offset < buffer.count {
+                let byte = buffer[offset]
+                guard byte >= 48, byte <= 57 else {
+                    break
+                }
                 readFractionDigit = true
                 appendDigit(byte - 48, isInteger: false)
                 offset += 1
@@ -136,7 +160,11 @@ extension KomaJSONScanner {
 
             var exponent = 0
             var readExponentDigit = false
-            while let byte = peek(), byte >= 48, byte <= 57 {
+            while offset < buffer.count {
+                let byte = buffer[offset]
+                guard byte >= 48, byte <= 57 else {
+                    break
+                }
                 readExponentDigit = true
                 if exponent < 10000 {
                     exponent = exponent * 10 + Int(byte - 48)
