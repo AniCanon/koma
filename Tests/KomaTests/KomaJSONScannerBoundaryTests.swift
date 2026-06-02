@@ -23,8 +23,9 @@ struct JSONIntegerWidthsRecord: KomaEntityRecord, Equatable {
 /// Boundary coverage for the JSON scanner hot loops (whitespace skipping, string-body
 /// scanning, number parsing). The string scan skips whole machine words at a time (8-byte
 /// SWAR), so these sweeps land a special byte (quote, backslash) or a multibyte UTF-8
-/// sequence at every position relative to an 8- and 16-byte word boundary. They passed
-/// against the scalar scanner and must keep passing after the word-scan rework.
+/// sequence at every position relative to the scanner's 8-byte word stride (the ranges run
+/// well past it, so they also cover the 16- and 24-byte multiples). They passed against the
+/// scalar scanner and must keep passing after the word-scan rework.
 struct KomaJSONScannerBoundaryTests {
     private func projectJSON(name: String, rank: Int = 1) -> Data {
         let escaped = name
@@ -34,7 +35,7 @@ struct KomaJSONScannerBoundaryTests {
     }
 
     @Test(arguments: 0 ... 40)
-    func `string body of every length around the 16-byte stride decodes intact`(length: Int) throws {
+    func `string body of every length around the word stride decodes intact`(length: Int) throws {
         let name = String(repeating: "a", count: length)
         let decoded = try JSONProjectRecord.komaJSONRecord(from: projectJSON(name: name))
         #expect(JSONProjectRecord.komaUsesJSONFastPath)
@@ -42,22 +43,22 @@ struct KomaJSONScannerBoundaryTests {
     }
 
     @Test(arguments: 0 ... 34)
-    func `escaped newline at every offset across a chunk boundary decodes intact`(prefix: Int) throws {
-        // Backslash lands at body offset `prefix`; sweep places it at every lane.
+    func `escaped newline at every offset across a word boundary decodes intact`(prefix: Int) throws {
+        // Backslash lands at body offset `prefix`; the sweep places it at every word offset.
         let name = String(repeating: "a", count: prefix) + "\n" + "b"
         let decoded = try JSONProjectRecord.komaJSONRecord(from: projectJSON(name: name))
         #expect(decoded.name == name)
     }
 
     @Test(arguments: 0 ... 34)
-    func `escaped quote at every offset across a chunk boundary decodes intact`(prefix: Int) throws {
+    func `escaped quote at every offset across a word boundary decodes intact`(prefix: Int) throws {
         let name = String(repeating: "a", count: prefix) + "\"" + "b"
         let decoded = try JSONProjectRecord.komaJSONRecord(from: projectJSON(name: name))
         #expect(decoded.name == name)
     }
 
     @Test(arguments: 0 ... 34)
-    func `multibyte UTF-8 straddling a chunk boundary decodes intact`(prefix: Int) throws {
+    func `multibyte UTF-8 straddling a word boundary decodes intact`(prefix: Int) throws {
         // The emoji is 4 UTF-8 bytes; sweeping the prefix makes it cross a word boundary at some point.
         let name = String(repeating: "a", count: prefix) + "😀" + "z"
         let decoded = try JSONProjectRecord.komaJSONRecord(from: projectJSON(name: name))
