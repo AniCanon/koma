@@ -121,12 +121,14 @@ let benchmarks: @Sendable () -> Void = {
     }
 
     Benchmark("koma.sqlite.filteredOrderedFetch.10k.limit100") { benchmark in
-        let path = BenchmarkFixtures.databasePath("koma-fetch")
-        defer { BenchmarkFixtures.removeDatabaseFiles(path) }
+        let store = try await BenchmarkFixtureCache.shared.value("koma-fetch") {
+            let path = BenchmarkFixtures.databasePath("koma-fetch")
+            let store = try await SQLiteKomaStore(path: path)
+            try await store.upsert(largeRecords)
+            return store
+        }
 
-        let store = try await SQLiteKomaStore(path: path)
-        try await store.upsert(largeRecords)
-
+        benchmark.startMeasurement()
         for _ in benchmark.scaledIterations {
             let records = try await store
                 .query(BenchmarkProjectRecord.self)
@@ -136,29 +138,35 @@ let benchmarks: @Sendable () -> Void = {
                 .fetch()
             blackHole(records.count)
         }
+        benchmark.stopMeasurement()
     }
 
     Benchmark("rawsqlite.filteredOrderedFetch.10k.limit100") { benchmark in
-        let path = BenchmarkFixtures.databasePath("raw-fetch")
-        defer { BenchmarkFixtures.removeDatabaseFiles(path) }
+        let database = try await BenchmarkFixtureCache.shared.value("raw-fetch") {
+            let path = BenchmarkFixtures.databasePath("raw-fetch")
+            let database = try RawSQLiteBenchmarkDatabase(path: path)
+            try database.upsert(large)
+            return database
+        }
 
-        let database = try RawSQLiteBenchmarkDatabase(path: path)
-        try database.upsert(large)
-
+        benchmark.startMeasurement()
         for _ in benchmark.scaledIterations {
             let records = try database.fetchActiveProjects(limit: 100)
             blackHole(records.count)
         }
+        benchmark.stopMeasurement()
     }
 
     Benchmark("koma.sqlite.innerJoinFilter.10k.limit100") { benchmark in
-        let path = BenchmarkFixtures.databasePath("koma-inner-join")
-        defer { BenchmarkFixtures.removeDatabaseFiles(path) }
+        let store = try await BenchmarkFixtureCache.shared.value("koma-inner-join") {
+            let path = BenchmarkFixtures.databasePath("koma-inner-join")
+            let store = try await SQLiteKomaStore(path: path)
+            try await store.upsert(largeRecords)
+            try await store.upsert(largeCharacterRecords)
+            return store
+        }
 
-        let store = try await SQLiteKomaStore(path: path)
-        try await store.upsert(largeRecords)
-        try await store.upsert(largeCharacterRecords)
-
+        benchmark.startMeasurement()
         for _ in benchmark.scaledIterations {
             let records = try await store
                 .query(BenchmarkProjectRecord.self)
@@ -170,30 +178,36 @@ let benchmarks: @Sendable () -> Void = {
                 .fetch()
             blackHole(records.count)
         }
+        benchmark.stopMeasurement()
     }
 
     Benchmark("rawsqlite.innerJoinFilter.10k.limit100") { benchmark in
-        let path = BenchmarkFixtures.databasePath("raw-inner-join")
-        defer { BenchmarkFixtures.removeDatabaseFiles(path) }
+        let database = try await BenchmarkFixtureCache.shared.value("raw-inner-join") {
+            let path = BenchmarkFixtures.databasePath("raw-inner-join")
+            let database = try RawSQLiteBenchmarkDatabase(path: path)
+            try database.upsert(large)
+            try database.upsertCharacters(largeCharacters)
+            return database
+        }
 
-        let database = try RawSQLiteBenchmarkDatabase(path: path)
-        try database.upsert(large)
-        try database.upsertCharacters(largeCharacters)
-
+        benchmark.startMeasurement()
         for _ in benchmark.scaledIterations {
             let records = try database.fetchProjectsWithLeadCharacters(limit: 100)
             blackHole(records.count)
         }
+        benchmark.stopMeasurement()
     }
 
     Benchmark("koma.sqlite.rightJoinMatched.10k.limit100") { benchmark in
-        let path = BenchmarkFixtures.databasePath("koma-right-join")
-        defer { BenchmarkFixtures.removeDatabaseFiles(path) }
+        let store = try await BenchmarkFixtureCache.shared.value("koma-right-join") {
+            let path = BenchmarkFixtures.databasePath("koma-right-join")
+            let store = try await SQLiteKomaStore(path: path)
+            try await store.upsert(largeRecords)
+            try await store.upsert(largeCharacterRecords)
+            return store
+        }
 
-        let store = try await SQLiteKomaStore(path: path)
-        try await store.upsert(largeRecords)
-        try await store.upsert(largeCharacterRecords)
-
+        benchmark.startMeasurement()
         for _ in benchmark.scaledIterations {
             let records = try await store
                 .query(BenchmarkProjectRecord.self)
@@ -206,30 +220,36 @@ let benchmarks: @Sendable () -> Void = {
                 .fetch()
             blackHole(records.count)
         }
+        benchmark.stopMeasurement()
     }
 
     Benchmark("rawsqlite.rightJoinMatched.10k.limit100") { benchmark in
-        let path = BenchmarkFixtures.databasePath("raw-right-join")
-        defer { BenchmarkFixtures.removeDatabaseFiles(path) }
+        let database = try await BenchmarkFixtureCache.shared.value("raw-right-join") {
+            let path = BenchmarkFixtures.databasePath("raw-right-join")
+            let database = try RawSQLiteBenchmarkDatabase(path: path)
+            try database.upsert(large)
+            try database.upsertCharacters(largeCharacters)
+            return database
+        }
 
-        let database = try RawSQLiteBenchmarkDatabase(path: path)
-        try database.upsert(large)
-        try database.upsertCharacters(largeCharacters)
-
+        benchmark.startMeasurement()
         for _ in benchmark.scaledIterations {
             let records = try database.fetchProjectsRightJoinedToLeadCharacters(limit: 100)
             blackHole(records.count)
         }
+        benchmark.stopMeasurement()
     }
 
     Benchmark("koma.sqlite.leftJoinMissing.10k.limit100") { benchmark in
-        let path = BenchmarkFixtures.databasePath("koma-left-join")
-        defer { BenchmarkFixtures.removeDatabaseFiles(path) }
+        let store = try await BenchmarkFixtureCache.shared.value("koma-left-join") {
+            let path = BenchmarkFixtures.databasePath("koma-left-join")
+            let store = try await SQLiteKomaStore(path: path)
+            try await store.upsert(largeRecords)
+            try await store.upsert(largeCharacterRecords)
+            return store
+        }
 
-        let store = try await SQLiteKomaStore(path: path)
-        try await store.upsert(largeRecords)
-        try await store.upsert(largeCharacterRecords)
-
+        benchmark.startMeasurement()
         for _ in benchmark.scaledIterations {
             let records = try await store
                 .query(BenchmarkProjectRecord.self)
@@ -241,20 +261,24 @@ let benchmarks: @Sendable () -> Void = {
                 .fetch()
             blackHole(records.count)
         }
+        benchmark.stopMeasurement()
     }
 
     Benchmark("rawsqlite.leftJoinMissing.10k.limit100") { benchmark in
-        let path = BenchmarkFixtures.databasePath("raw-left-join")
-        defer { BenchmarkFixtures.removeDatabaseFiles(path) }
+        let database = try await BenchmarkFixtureCache.shared.value("raw-left-join") {
+            let path = BenchmarkFixtures.databasePath("raw-left-join")
+            let database = try RawSQLiteBenchmarkDatabase(path: path)
+            try database.upsert(large)
+            try database.upsertCharacters(largeCharacters)
+            return database
+        }
 
-        let database = try RawSQLiteBenchmarkDatabase(path: path)
-        try database.upsert(large)
-        try database.upsertCharacters(largeCharacters)
-
+        benchmark.startMeasurement()
         for _ in benchmark.scaledIterations {
             let records = try database.fetchProjectsWithoutCharacters(limit: 100)
             blackHole(records.count)
         }
+        benchmark.stopMeasurement()
     }
 
     Benchmark("koma.resource.networkFirstFallback.1k") { benchmark in
@@ -285,18 +309,19 @@ let benchmarks: @Sendable () -> Void = {
     }
 
     Benchmark("koma.resource.localOnly.10k.limit100") { benchmark in
-        let path = BenchmarkFixtures.databasePath("koma-local-only")
-        defer { BenchmarkFixtures.removeDatabaseFiles(path) }
-
-        let store = try await SQLiteKomaStore(path: path)
-        try await store.upsert(largeRecords)
-        let transport = FakeKomaTransport()
+        let store = try await BenchmarkFixtureCache.shared.value("koma-local-only") {
+            let path = BenchmarkFixtures.databasePath("koma-local-only")
+            let store = try await SQLiteKomaStore(path: path)
+            try await store.upsert(largeRecords)
+            return store
+        }
         let koma = KomaClient(
             baseURL: URL(string: "https://benchmark.invalid")!,
             store: store,
-            transport: transport
+            transport: FakeKomaTransport()
         )
 
+        benchmark.startMeasurement()
         for _ in benchmark.scaledIterations {
             let snapshot = try await BenchmarkProjectResources
                 .client(in: koma)
@@ -307,6 +332,7 @@ let benchmarks: @Sendable () -> Void = {
                 .fetch(policy: .localOnly)
             blackHole(snapshot.value.count)
         }
+        benchmark.stopMeasurement()
     }
 
     registerComparisonBenchmarks(small: small, large: large)

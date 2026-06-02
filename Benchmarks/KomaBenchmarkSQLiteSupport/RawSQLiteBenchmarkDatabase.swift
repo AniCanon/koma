@@ -2,7 +2,9 @@ import CKomaSQLite
 import Foundation
 import KomaBenchmarkSupport
 
-public final class RawSQLiteBenchmarkDatabase {
+/// @unchecked Sendable: benchmarks drive a single connection sequentially (no concurrent
+/// access), which lets a populated instance be cached in BenchmarkFixtureCache and reused.
+public final class RawSQLiteBenchmarkDatabase: @unchecked Sendable {
     private var connection: OpaquePointer?
 
     public init(path: String) throws {
