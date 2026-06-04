@@ -1,7 +1,11 @@
 extension KomaJSONScanner {
     @inline(__always)
     mutating func skipWhitespace() throws {
-        while let byte = peek(), byte == 32 || byte == 10 || byte == 13 || byte == 9 {
+        while offset < buffer.count {
+            let byte = buffer[offset]
+            guard byte == 32 || byte == 10 || byte == 13 || byte == 9 else {
+                break
+            }
             offset += 1
         }
     }

@@ -27,20 +27,26 @@ func registerCoreDataBenchmarks(small: [BenchmarkProject], large: [BenchmarkProj
     }
 
     Benchmark("coredata.sqlite.filteredOrderedFetch.10k.limit100") { benchmark in
-        let path = BenchmarkFixtures.databasePath("coredata-fetch")
-        defer { BenchmarkFixtures.removeDatabaseFiles(path) }
+        // Build + populate once (cached); measure only the fetch, not the 10k-row insert.
+        let database = try await BenchmarkFixtureCache.shared.value("coredata-fetch") {
+            let path = BenchmarkFixtures.databasePath("coredata-fetch")
+            let database = try CoreDataBenchmarkDatabase(path: path)
+            try database.insert(large)
+            return database
+        }
 
-        let database = try CoreDataBenchmarkDatabase(path: path)
-        try database.insert(large)
-
+        benchmark.startMeasurement()
         for _ in benchmark.scaledIterations {
             let projects = try database.fetchActiveProjects(limit: 100)
             blackHole(projects.count)
         }
+        benchmark.stopMeasurement()
     }
 }
 
-private final class CoreDataBenchmarkDatabase {
+/// @unchecked Sendable: benchmarks drive the container sequentially, letting a populated
+/// instance be cached in BenchmarkFixtureCache and reused across measured iterations.
+private final class CoreDataBenchmarkDatabase: @unchecked Sendable {
     private static let entityName = "CoreDataBenchmarkProject"
 
     private let container: NSPersistentContainer

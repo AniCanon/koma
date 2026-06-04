@@ -7,6 +7,11 @@ import PackageDescription
 let enableBenchmarks = ProcessInfo.processInfo.environment["KOMA_ENABLE_BENCHMARKS"] == "1"
 let includeGRDBBenchmarks = enableBenchmarks
     && ProcessInfo.processInfo.environment["KOMA_DISABLE_GRDB_BENCHMARKS"] != "1"
+/// SwiftData's @Model macro plugin ships only with the Xcode toolchain, so its comparison
+/// benchmarks are opt-in (default off) to keep `swift package benchmark` building on the
+/// open-source CLI toolchain. Set KOMA_INCLUDE_SWIFTDATA_BENCHMARKS=1 when building via Xcode.
+let includeSwiftDataBenchmarks = enableBenchmarks
+    && ProcessInfo.processInfo.environment["KOMA_INCLUDE_SWIFTDATA_BENCHMARKS"] == "1"
 
 let dependencies: [Package.Dependency] = [
     .package(url: "https://github.com/swiftlang/swift-syntax.git", "601.0.0" ..< "604.0.0")
@@ -74,8 +79,10 @@ let benchmarkTargets: [Target] = enableBenchmarks ? [
             .product(name: "GRDB", package: "GRDB.swift")
         ] : []),
         path: "Benchmarks/KomaBenchmarks",
-        exclude: includeGRDBBenchmarks ? [] : ["GRDBBenchmarks.swift"],
-        swiftSettings: includeGRDBBenchmarks ? [.define("KOMA_INCLUDE_GRDB_BENCHMARKS")] : [],
+        exclude: (includeGRDBBenchmarks ? [] : ["GRDBBenchmarks.swift"])
+            + (includeSwiftDataBenchmarks ? [] : ["SwiftDataBenchmarks.swift"]),
+        swiftSettings: (includeGRDBBenchmarks ? [.define("KOMA_INCLUDE_GRDB_BENCHMARKS")] : [])
+            + (includeSwiftDataBenchmarks ? [.define("KOMA_INCLUDE_SWIFTDATA_BENCHMARKS")] : []),
         plugins: [
             .plugin(name: "BenchmarkPlugin", package: "benchmark")
         ]

@@ -26,20 +26,26 @@ func registerGRDBBenchmarks(small: [BenchmarkProject], large: [BenchmarkProject]
     }
 
     Benchmark("grdb.sqlite.filteredOrderedFetch.10k.limit100") { benchmark in
-        let path = BenchmarkFixtures.databasePath("grdb-fetch")
-        defer { BenchmarkFixtures.removeDatabaseFiles(path) }
+        // Build + populate once (cached); measure only the fetch, not the 10k-row insert.
+        let database = try await BenchmarkFixtureCache.shared.value("grdb-fetch") {
+            let path = BenchmarkFixtures.databasePath("grdb-fetch")
+            let database = try GRDBBenchmarkDatabase(path: path)
+            try database.upsert(large)
+            return database
+        }
 
-        let database = try GRDBBenchmarkDatabase(path: path)
-        try database.upsert(large)
-
+        benchmark.startMeasurement()
         for _ in benchmark.scaledIterations {
             let projects = try database.fetchActiveProjects(limit: 100)
             blackHole(projects.count)
         }
+        benchmark.stopMeasurement()
     }
 }
 
-private final class GRDBBenchmarkDatabase {
+/// @unchecked Sendable: benchmarks drive the queue sequentially, letting a populated instance
+/// be cached in BenchmarkFixtureCache and reused across measured iterations.
+private final class GRDBBenchmarkDatabase: @unchecked Sendable {
     private let queue: DatabaseQueue
 
     init(path: String) throws {

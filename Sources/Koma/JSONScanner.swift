@@ -94,60 +94,40 @@ public struct KomaJSONScanner {
         try expect(.quote)
         let start = offset
 
-        while offset < buffer.count {
-            let byte = buffer[offset]
-            if byte == JSONByte.quote.rawValue {
-                let end = offset
-                offset += 1
-                return String(decoding: buffer[start ..< end], as: UTF8.self)
-            }
-            if byte == JSONByte.backslash.rawValue {
-                return try readEscapedString(start: start)
-            }
+        let (delimiter, isASCII) = try skipToStringDelimiter()
+        if delimiter == JSONByte.quote.rawValue {
+            let end = offset
             offset += 1
+            if isASCII {
+                return makeASCIIString(start: start, end: end)
+            }
+            return String(decoding: buffer[start ..< end], as: UTF8.self)
         }
-
-        throw KomaJSONFastPathError.unexpectedEnd
+        return try readEscapedString(start: start)
     }
 
     public mutating func readText() throws -> KomaJSONText {
         try expect(.quote)
         let start = offset
 
-        while offset < buffer.count {
-            let byte = buffer[offset]
-            if byte == JSONByte.quote.rawValue {
-                let end = offset
-                offset += 1
-                return KomaJSONText(buffer: buffer, range: start ..< end)
-            }
-            if byte == JSONByte.backslash.rawValue {
-                return try KomaJSONText(stringValue: readEscapedString(start: start))
-            }
+        if try skipToStringDelimiter().delimiter == JSONByte.quote.rawValue {
+            let end = offset
             offset += 1
+            return KomaJSONText(buffer: buffer, range: start ..< end)
         }
-
-        throw KomaJSONFastPathError.unexpectedEnd
+        return try KomaJSONText(stringValue: readEscapedString(start: start))
     }
 
     public mutating func readKey() throws -> KomaJSONKey {
         try expect(.quote)
         let start = offset
 
-        while offset < buffer.count {
-            let byte = buffer[offset]
-            if byte == JSONByte.quote.rawValue {
-                let end = offset
-                offset += 1
-                return KomaJSONKey(buffer: buffer, range: start ..< end)
-            }
-            if byte == JSONByte.backslash.rawValue {
-                return try KomaJSONKey(stringValue: readEscapedString(start: start))
-            }
+        if try skipToStringDelimiter().delimiter == JSONByte.quote.rawValue {
+            let end = offset
             offset += 1
+            return KomaJSONKey(buffer: buffer, range: start ..< end)
         }
-
-        throw KomaJSONFastPathError.unexpectedEnd
+        return try KomaJSONKey(stringValue: readEscapedString(start: start))
     }
 
     public mutating func readOptionalString() throws -> String? {
@@ -182,6 +162,15 @@ public struct KomaJSONScanner {
         return try readBool()
     }
 
+    /// Pre-specialized cross-module: macro-generated decoders live in another module, so
+    /// without exported specializations every integer field pays runtime generic-metadata
+    /// instantiation (profiled at ~5x the cost of the actual parse). These cover the concrete
+    /// widths the @KomaEntity macro emits; any other width falls back to the generic path.
+    @_specialize(exported: true, where Value == Int)
+    @_specialize(exported: true, where Value == Int64)
+    @_specialize(exported: true, where Value == Int32)
+    @_specialize(exported: true, where Value == Int16)
+    @_specialize(exported: true, where Value == Int8)
     public mutating func readInteger<Value: FixedWidthInteger & SignedInteger>(
         as type: Value.Type = Value.self
     ) throws -> Value {
@@ -192,6 +181,11 @@ public struct KomaJSONScanner {
         return converted
     }
 
+    @_specialize(exported: true, where Value == Int)
+    @_specialize(exported: true, where Value == Int64)
+    @_specialize(exported: true, where Value == Int32)
+    @_specialize(exported: true, where Value == Int16)
+    @_specialize(exported: true, where Value == Int8)
     public mutating func readOptionalInteger<Value: FixedWidthInteger & SignedInteger>(
         as type: Value.Type = Value.self
     ) throws -> Value? {
