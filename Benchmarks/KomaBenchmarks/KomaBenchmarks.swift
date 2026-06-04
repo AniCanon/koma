@@ -337,6 +337,7 @@ let benchmarks: @Sendable () -> Void = {
 
     registerComparisonBenchmarks(small: small, large: large)
     registerNetworkBenchmarks()
+    registerHybridSearchBenchmarks()
 }
 
 private actor BenchmarkObservationSink {
