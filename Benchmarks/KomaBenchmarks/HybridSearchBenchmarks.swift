@@ -55,6 +55,8 @@ enum MemoryBenchmarkFixtures {
     }
 
     static let blobs: [Data] = vectors.map(KomaVector.encode)
+    static let codes: [Data] = vectors.map(KomaVector.encodeInt8)
+    static let queryCode: Data = KomaVector.encodeInt8(query)
 
     static func store(_ label: String) async throws -> SQLiteKomaStore {
         try await BenchmarkFixtureCache.shared.value(label) {
@@ -160,8 +162,12 @@ func registerHybridSearchBenchmarks() {
         }
         benchmark.stopMeasurement()
     }
+}
 
-    // MARK: Raw SQLite (hand-written C API) — the zero-framework floor.
+// MARK: Raw SQLite (hand-written C API) — the zero-framework floor + quantized prototype.
+
+func registerRawSQLiteMemoryBenchmarks() {
+    let fixtures = MemoryBenchmarkFixtures.self
 
     func rawDatabase(_ label: String) async throws -> RawSQLiteMemoryDatabase {
         try await BenchmarkFixtureCache.shared.value(label) {
@@ -200,6 +206,28 @@ func registerHybridSearchBenchmarks() {
         benchmark.startMeasurement()
         for _ in benchmark.scaledIterations {
             try blackHole(database.hybridSearch(matching: "swift", near: query, limit: 20).count)
+        }
+        benchmark.stopMeasurement()
+    }
+
+    // MARK: int8 quantized scan + full-precision rerank (Tier 1+2 prototype).
+
+    Benchmark("rawsqlite.nearestQuantized.10k.dim384") { benchmark in
+        let database = try await BenchmarkFixtureCache.shared.value("raw-memories-quantized") {
+            let database = try RawSQLiteMemoryDatabase(path: BenchmarkFixtures.databasePath("raw-memories-quantized"))
+            try database.populate(
+                count: MemoryBenchmarkFixtures.corpus,
+                content: MemoryBenchmarkFixtures.content,
+                embedding: { MemoryBenchmarkFixtures.blobs[$0] }
+            )
+            try database.buildInt8Index(count: MemoryBenchmarkFixtures.corpus, code: { MemoryBenchmarkFixtures.codes[$0] })
+            return database
+        }
+        let query = fixtures.query
+        let queryCode = fixtures.queryCode
+        benchmark.startMeasurement()
+        for _ in benchmark.scaledIterations {
+            try blackHole(database.nearestQuantized(queryCode: queryCode, query: query, limit: 20, overfetch: 10).count)
         }
         benchmark.stopMeasurement()
     }

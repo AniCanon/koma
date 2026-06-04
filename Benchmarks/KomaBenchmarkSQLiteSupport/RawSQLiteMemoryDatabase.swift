@@ -157,6 +157,90 @@ public final class RawSQLiteMemoryDatabase: @unchecked Sendable {
         return Array(fused.prefix(limit))
     }
 
+    /// Builds an int8 sidecar table holding one quantized code per row, keyed by the main table's
+    /// rowid (rows are inserted 0..<count, so rowid == index + 1). The compact codes are what the
+    /// quantized scan reads — 1 byte/dim vs 8 for the Float64 embedding.
+    public func buildInt8Index(count: Int, code: (Int) -> Data) throws {
+        try execute("CREATE TABLE IF NOT EXISTS memories_i8 (rowid INTEGER PRIMARY KEY, code BLOB NOT NULL)")
+        let statement = try prepare("INSERT INTO memories_i8 (rowid, code) VALUES (?, ?)")
+        defer { sqlite3_finalize(statement) }
+
+        try execute("BEGIN IMMEDIATE TRANSACTION")
+        do {
+            for index in 0 ..< count {
+                sqlite3_bind_int64(statement, 1, Int64(index + 1))
+                code(index).withUnsafeBytes { raw in
+                    sqlite3_bind_blob(statement, 2, raw.baseAddress, Int32(raw.count), rawMemoryTransient)
+                }
+                guard sqlite3_step(statement) == SQLITE_DONE else {
+                    throw RawSQLiteMemoryError.executionFailed(errorMessage)
+                }
+                sqlite3_reset(statement)
+                sqlite3_clear_bindings(statement)
+            }
+            try execute("COMMIT")
+        } catch {
+            try? execute("ROLLBACK")
+            throw error
+        }
+    }
+
+    /// Quantized nearest: scan the compact int8 sidecar (integer dot ≈ cosine ranking) for the top
+    /// `limit * overfetch` candidates, then rerank those with exact Float64 cosine for the top-k.
+    public func nearestQuantized(queryCode: Data, query: [Double], limit: Int, overfetch: Int) throws -> [(
+        row: RawMemoryRow,
+        similarity: Double
+    )] {
+        guard limit > 0 else { return [] }
+        let queryCodes = queryCode.withUnsafeBytes { Array($0.bindMemory(to: Int8.self)) }
+        let dimension = queryCodes.count
+
+        // 1. int8 pre-filter scan over the sidecar — integer dot product, read in place.
+        let scan = try prepare("SELECT rowid, code FROM memories_i8")
+        defer { sqlite3_finalize(scan) }
+        var scored: [(rowid: Int64, score: Int)] = []
+        while sqlite3_step(scan) == SQLITE_ROW {
+            guard Int(sqlite3_column_bytes(scan, 1)) == dimension,
+                  let bytes = sqlite3_column_blob(scan, 1) else { continue }
+            let codes = bytes.assumingMemoryBound(to: Int8.self)
+            var dot = 0
+            for index in 0 ..< dimension {
+                dot += Int(queryCodes[index]) * Int(codes[index])
+            }
+            scored.append((sqlite3_column_int64(scan, 0), dot))
+        }
+
+        let candidates = scored.sorted { $0.score > $1.score }.prefix(limit * overfetch).map(\.rowid)
+        guard !candidates.isEmpty else { return [] }
+
+        // 2. Rerank candidates with exact full-precision cosine.
+        let queryNorm = query.reduce(0) { $0 + $1 * $1 }.squareRoot()
+        let ids = candidates.map(String.init).joined(separator: ", ")
+        let rerank = try prepare("SELECT id, content, embedding FROM memories WHERE rowid IN (\(ids))")
+        defer { sqlite3_finalize(rerank) }
+        var reranked: [(row: RawMemoryRow, similarity: Double)] = []
+        while sqlite3_step(rerank) == SQLITE_ROW {
+            let row = row(from: rerank)
+            reranked.append((row, exactCosine(query, queryNorm: queryNorm, blob: row.embedding)))
+        }
+        return Array(reranked.sorted { $0.similarity > $1.similarity }.prefix(limit))
+    }
+
+    private func exactCosine(_ query: [Double], queryNorm: Double, blob: Data) -> Double {
+        blob.withUnsafeBytes { raw in
+            let values = raw.bindMemory(to: Double.self)
+            guard values.count == query.count, queryNorm > 0 else { return 0 }
+            var dot = 0.0
+            var normB = 0.0
+            for index in query.indices {
+                dot += query[index] * values[index]
+                normB += values[index] * values[index]
+            }
+            let magnitude = queryNorm * normB.squareRoot()
+            return magnitude == 0 ? 0 : dot / magnitude
+        }
+    }
+
     private func row(from statement: OpaquePointer) -> RawMemoryRow {
         let id = sqlite3_column_text(statement, 0).map { String(cString: $0) } ?? ""
         let content = sqlite3_column_text(statement, 1).map { String(cString: $0) } ?? ""
