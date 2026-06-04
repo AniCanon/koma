@@ -1,6 +1,7 @@
 import Benchmark
 import Foundation
 import Koma
+import KomaBenchmarkSQLiteSupport
 import KomaBenchmarkSupport
 import KomaMacros
 import KomaSQLite
@@ -156,6 +157,49 @@ func registerHybridSearchBenchmarks() {
                 limit: 20
             )
             blackHole(results.count)
+        }
+        benchmark.stopMeasurement()
+    }
+
+    // MARK: Raw SQLite (hand-written C API) — the zero-framework floor.
+
+    func rawDatabase(_ label: String) async throws -> RawSQLiteMemoryDatabase {
+        try await BenchmarkFixtureCache.shared.value(label) {
+            let database = try RawSQLiteMemoryDatabase(path: BenchmarkFixtures.databasePath(label))
+            try database.populate(
+                count: MemoryBenchmarkFixtures.corpus,
+                content: MemoryBenchmarkFixtures.content,
+                embedding: { MemoryBenchmarkFixtures.blobs[$0] }
+            )
+            return database
+        }
+    }
+
+    Benchmark("rawsqlite.fullTextSearch.10k") { benchmark in
+        let database = try await rawDatabase("raw-memories-fts")
+        benchmark.startMeasurement()
+        for _ in benchmark.scaledIterations {
+            try blackHole(database.fullTextSearch("swift", limit: 20).count)
+        }
+        benchmark.stopMeasurement()
+    }
+
+    Benchmark("rawsqlite.nearest.10k.dim384") { benchmark in
+        let database = try await rawDatabase("raw-memories-nearest")
+        let query = fixtures.query
+        benchmark.startMeasurement()
+        for _ in benchmark.scaledIterations {
+            try blackHole(database.nearest(to: query, limit: 20).count)
+        }
+        benchmark.stopMeasurement()
+    }
+
+    Benchmark("rawsqlite.hybridSearch.10k.dim384") { benchmark in
+        let database = try await rawDatabase("raw-memories-hybrid")
+        let query = fixtures.query
+        benchmark.startMeasurement()
+        for _ in benchmark.scaledIterations {
+            try blackHole(database.hybridSearch(matching: "swift", near: query, limit: 20).count)
         }
         benchmark.stopMeasurement()
     }
