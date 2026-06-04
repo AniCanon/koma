@@ -13,7 +13,7 @@ private struct HybridMemoryRecord: KomaEntityRecord, Equatable {
     init(id: String, content: String, embedding: [Double]) {
         self.id = id
         self.content = content
-        self.embedding = embedding.komaVectorData
+        self.embedding = KomaVector.encode(embedding)
     }
 }
 
@@ -50,7 +50,7 @@ struct KomaHybridSearchTests {
         let a = record("a"), b = record("b"), c = record("c")
 
         // a is rank 1 in both lists; c appears in both (ranks 3 and 2); b appears in only one.
-        let fused = komaReciprocalRankFusion([[a, b, c], [a, c]], by: \.id, k: 60)
+        let fused = KomaVector.fuse([[a, b, c], [a, c]], by: \.id, k: 60)
 
         #expect(fused.map(\.id) == ["a", "c", "b"])
     }

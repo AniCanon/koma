@@ -117,7 +117,7 @@ public extension SQLiteKomaStore {
         return values
     }
 
-    private static func stepError(_ statement: OpaquePointer) -> SQLiteKomaError {
+    static func stepError(_ statement: OpaquePointer) -> SQLiteKomaError {
         let message = sqlite3_db_handle(statement)
             .flatMap(sqlite3_errmsg)
             .map { String(cString: $0) } ?? "SQLite step failed."
