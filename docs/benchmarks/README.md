@@ -23,8 +23,16 @@ Koma treats benchmark results as versioned release artifacts. A published result
 - `swiftdata.sqlite.filteredOrderedFetch.10k.limit100`: equivalent SwiftData filtered fetch.
 - `koma.resource.networkFirstFallback.1k`: fake REST response, JSON decode, record mapping, SQLite persist, local query, and record-to-remote mapping.
 - `koma.resource.localOnly.10k.limit100`: resource API local read path over a prewarmed store.
+- `koma.sqlite.fullTextSearch.10k`: FTS5 external-content keyword search over a 10k memory corpus.
+- `koma.sqlite.nearest.10k.dim384`: exact cosine nearest-neighbor search over 10k stored 384-dim `Float64` embeddings.
+- `koma.sqlite.nearestQuantized.10k.dim384`: int8 sidecar pre-filter plus exact rerank over the same corpus.
+- `koma.sqlite.hybridSearch.10k.dim384`: reciprocal-rank fusion over FTS5 keyword recall and exact vector recall.
+- `koma.sqlite.hybridSearchQuantized.10k.dim384`: reciprocal-rank fusion over FTS5 keyword recall and quantized vector recall.
+- `rawsqlite.fullTextSearch.10k`, `rawsqlite.nearest.10k.dim384`, `rawsqlite.nearestQuantized.10k.dim384`, `rawsqlite.hybridSearch.10k.dim384`, and `rawsqlite.hybridSearchQuantized.10k.dim384`: hand-written SQLite baselines for the same search workloads.
+- `grdb.sqlite.fullTextSearch.10k`, `grdb.sqlite.nearest.10k.dim384`, and `grdb.sqlite.hybridSearch.10k.dim384`: GRDB peer baselines for the same search workloads.
+- `koma.vector.cosineScan.10k.dim384`, `koma.vector.encode.1k.dim384`, `koma.vector.decode.1k.dim384`, and `koma.fusion.rrf.2x1k`: in-memory vector and ranking-fusion primitives used to interpret the store-level search numbers.
 
-The raw SQLite benchmarks are the primary baseline because they are portable across iOS, Android Swift, macOS, and Linux. GRDB is the mature Swift SQLite peer baseline. SwiftData and Core Data are Apple-only comparison suites, so they should not be presented as Android peers. Core Data uses its optimized batch insert API; SwiftData currently uses model insertion because it does not expose an equivalent public batch insert API.
+The raw SQLite benchmarks are the primary baseline because they are portable across iOS, Android Swift, macOS, and Linux. They should be read as the lower-bound target Koma tries to stay close to, not as a baseline Koma must beat in every case. GRDB is the mature Swift SQLite peer baseline. SwiftData and Core Data are Apple-only comparison suites, so they should not be presented as Android peers. Core Data uses its optimized batch insert API; SwiftData currently uses model insertion because it does not expose an equivalent public batch insert API.
 
 ## Running Locally
 

@@ -15,6 +15,10 @@ mkdir -p "$RESULT_DIR"
 SWIFT_VERSION="$(swift --version | tr '\n' ' ' | sed 's/[[:space:]]*$//')"
 GIT_REVISION="$(git rev-parse --verify HEAD 2>/dev/null || echo unknown)"
 GIT_TAG="$(git describe --tags --exact-match 2>/dev/null || echo untagged)"
+GIT_DIRTY="false"
+if [ -n "$(git status --porcelain --untracked-files=normal 2>/dev/null)" ]; then
+  GIT_DIRTY="true"
+fi
 PLATFORM="$(uname -smr)"
 STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 COMMAND="swift package benchmark --target KomaBenchmarks $*"
@@ -30,6 +34,7 @@ cat > "$RESULT_DIR/metadata.json" <<JSON
   "startedAt": "$(json_escape "$STARTED_AT")",
   "gitRevision": "$(json_escape "$GIT_REVISION")",
   "gitTag": "$(json_escape "$GIT_TAG")",
+  "gitDirty": $GIT_DIRTY,
   "swiftVersion": "$(json_escape "$SWIFT_VERSION")",
   "platform": "$(json_escape "$PLATFORM")",
   "command": "$(json_escape "$COMMAND")"
@@ -47,6 +52,7 @@ cat > "$RESULT_DIR/summary.md" <<MARKDOWN
 - Finished: $FINISHED_AT
 - Git revision: $GIT_REVISION
 - Git tag: $GIT_TAG
+- Git dirty: $GIT_DIRTY
 - Swift: $SWIFT_VERSION
 - Platform: $PLATFORM
 

@@ -4,7 +4,7 @@
 
 # Koma
 
-Koma is a Swift 6.3 offline storage and refresh engine created by AniCanon for iOS and Android Swift. It provides typed SQLite persistence, lazy local queries, REST-backed refresh, auth plugins, retry plugins, and macro-expanded enum resource clients.
+Koma is a small Swift 6.3 SQLite ORM and offline refresh layer created by AniCanon for iOS and Android Swift. It keeps app code typed and repository-friendly while staying close to raw SQLite performance for local storage, search, and refresh workloads.
 
 Koma stores normalized records, not opaque REST payload blobs. The first goal is offline read-first data access; outbox writes, cursor sync, conflict resolution, and backend-specific sync protocols are intentionally deferred.
 
@@ -12,9 +12,9 @@ You can use Koma in storage-only mode as a typed SQLite ORM. The network/resourc
 
 ## What Koma Is
 
-Koma is a local-first data engine for Swift apps that need the same storage code on iOS and Android Swift. It gives you a typed SQLite ORM, macro-generated records and REST resources, relationship-aware queries, migrations, request refresh policies, auth plugins, retry plugins, and testable dependency injection.
+Koma is a local-first data layer for Swift apps that need the same storage code on iOS and Android Swift. It gives you a compact typed SQLite ORM, macro-generated records and REST resources, relationship-aware queries, migrations, request refresh policies, auth plugins, retry plugins, and testable dependency injection.
 
-Koma is not a backend, a global object graph, or a whole-database sync product. It does not try to replace Firebase or CloudKit. Instead, it turns the REST requests your app already owns into normalized local records, so screens can read from cache first and refresh when the app or platform scheduler asks them to.
+Koma is not a backend, a global object graph, a whole-database sync product, or a replacement for raw SQLite in every possible workload. Instead, it gives application repositories a small ORM that is close to raw SQLite on measured paths, plus escape hatches for custom SQL when an app needs them.
 
 ## Why Koma
 
@@ -23,6 +23,8 @@ AniCanon needed reliable offline data without forcing every backend endpoint to 
 Koma takes a smaller, practical stance: model the REST requests the app already makes, persist their typed records locally, and let the app keep important parameterized requests fresh. It gives repositories a stable local-first data layer while leaving true sync protocols to the moment the backend contract is ready.
 
 Architecturally, Koma is not Active Record. Records are value types that describe storage shape and mapping. They do not save themselves, fetch relationships by hidden globals, or own network calls. Persistence lives behind `KomaStore`, request refresh lives behind generated resource clients, and app features should still depend on repository or service protocols.
+
+The performance goal is not to beat hand-written SQLite in every microbenchmark. The goal is to make the common app-facing API small and typed while staying close enough to raw SQLite that teams do not have to choose between ergonomics and local performance.
 
 ## Packages
 
@@ -71,6 +73,76 @@ let projects = try await store.query(ProjectRecord.self)
 ```
 
 For this mode, depend on `Koma`, `KomaMacros`, and `KomaSQLite`. Add `KomaHTTP` only when you want REST-backed refresh. See [Storage-Only Mode](docs/guides/storage-only.md).
+
+## Raw SQL, FTS, and Vector Search
+
+Koma SQLite includes an escape hatch for custom SQL and local search workloads that need SQLite features beyond the typed query builder.
+
+```swift
+let rows = try await store.rawQuery(
+    """
+    SELECT m.id, bm25(memories_fts) AS rank
+    FROM memories AS m
+    JOIN memories_fts ON memories_fts.rowid = m.rowid
+    WHERE memories_fts MATCH ?
+    """,
+    arguments: ["embeddings"]
+)
+
+let id = try rows[0].string("id")
+```
+
+Raw writes can invalidate live observations when you tell Koma which tables changed:
+
+```swift
+try await store.rawExecute(
+    "UPDATE memories SET content = ? WHERE id = ?",
+    arguments: ["semantic search note", "1"],
+    invalidating: [MemoryRecord.komaTableName]
+)
+```
+
+For typed local search, create an FTS5 index and store embeddings as `Data` with `KomaVector.encode`:
+
+```swift
+try await store.createFullTextIndex(for: MemoryRecord.self, indexing: \.content)
+
+let keyword = try await store.fullTextSearch(
+    MemoryRecord.self,
+    matching: "embeddings",
+    limit: 20
+)
+
+let exact = try await store.nearest(
+    MemoryRecord.self,
+    to: queryEmbedding,
+    on: \.embedding,
+    limit: 20
+)
+```
+
+For larger local corpora, add the trigger-maintained int8 sidecar index and use quantized recall followed by exact reranking:
+
+```swift
+try await store.createQuantizedVectorIndex(for: MemoryRecord.self, on: \.embedding)
+
+let fast = try await store.nearestQuantized(
+    MemoryRecord.self,
+    to: queryEmbedding,
+    on: \.embedding,
+    limit: 20,
+    overfetch: 10
+)
+
+let hybrid = try await store.hybridSearch(
+    MemoryRecord.self,
+    matching: "embeddings",
+    near: queryEmbedding,
+    on: \.embedding,
+    identifiedBy: \.id,
+    vectorSearch: .quantized(overfetch: 10)
+)
+```
 
 ## Quick Start
 
@@ -339,7 +411,7 @@ brew install swiftformat swiftlint
 
 ## Benchmarks
 
-Koma includes a benchmark suite for storage, JSON, and resource-pipeline performance:
+Koma includes a benchmark suite for storage, local search, JSON, resource-pipeline, and HTTP-adapter performance:
 
 ```sh
 scripts/benchmark.sh
@@ -347,20 +419,24 @@ scripts/benchmark-official.sh .benchmark-results/local-koma
 scripts/benchmark-android.sh .benchmark-results/local-android
 ```
 
-Benchmark dependencies are opt-in. The package only resolves Alamofire, Moya, Apollo, GRDB, and `swift-benchmark` when `KOMA_ENABLE_BENCHMARKS=1`; normal app consumers do not download them.
+Benchmark dependencies are opt-in. The package only resolves Alamofire, Moya, Apollo, GRDB, and `swift-benchmark` when `KOMA_ENABLE_BENCHMARKS=1`; normal app consumers do not download them. SwiftData benchmarks are additionally opt-in for Xcode toolchains because the SwiftData model macro is not available in the open-source CLI toolchain by default.
 
-Lower is better. These are p50 wall-clock baselines from release builds captured with Swift 6.3. The Apple run was captured on May 25, 2026 with the SwiftPM benchmark runner on Darwin arm64 as the iOS-side runtime baseline; it is not an on-device iOS claim yet. The Android run was captured on May 24, 2026 with an arm64 emulator. Host GRDB is omitted from the Apple table because this Swift 6.3 toolchain still hits a release-mode GRDB benchmark compile failure.
+Lower is better. Read the storage and search tables as a closeness-to-raw check, not as a claim that Koma replaces hand-written SQLite everywhere. The fresh Apple/Darwin tables below are p50 wall-clock clean-branch numbers captured on June 5, 2026 with Apple Swift 6.3 on Darwin 25.5.0 arm64. Artifact: `.benchmark-results/feat-sqlite-raw-sql-clean-20260605`. Android emulator numbers remain the May 24, 2026 smoke baseline.
 
-Apple/Darwin storage:
+Apple/Darwin storage and local resources:
 
-| Operation | Koma | Raw SQLite | Core Data | SwiftData |
+| Operation | Koma | Raw SQLite | GRDB | Core Data |
 | --- | ---: | ---: | ---: | ---: |
-| Open + ensure schema | 1.712 ms | n/a | 2.935 ms | 6.263 ms |
-| Upsert or insert 1k records | 1.678 ms | 1.953 ms | 16.000 ms | 128.000 ms |
-| Observed upsert 1k + refetch | 2.652 ms | n/a | n/a | n/a |
-| Fused JSON upsert 1k | 2.099 ms | n/a | n/a | n/a |
-| Filtered fetch 10k, limit 100 | 8.360 ms | 10.000 ms | 102.000 ms | 854.000 ms |
-| Inner join filter 10k, limit 100 | 37.000 ms | 28.000 ms | n/a | n/a |
+| Open + ensure schema | 0.866 ms | n/a | 0.344 ms | 1.255 ms |
+| Upsert or insert 1k records | 1.532 ms | 1.789 ms | 7.938 ms | 6.996 ms |
+| Steady upsert 1k | 1.546 ms | n/a | n/a | n/a |
+| Observed upsert 1k + refetch | 1.707 ms | n/a | n/a | n/a |
+| Fused JSON upsert 1k | 1.693 ms | n/a | n/a | n/a |
+| Filtered fetch 10k, limit 100 | 0.284 ms | 0.283 ms | 0.344 ms | 0.537 ms |
+| Inner join filter 10k, limit 100 | 4.461 ms | 4.641 ms | n/a | n/a |
+| Right join matched 10k, limit 100 | 5.030 ms | 4.530 ms | n/a | n/a |
+| Left join missing 10k, limit 100 | 7.053 ms | 8.057 ms | n/a | n/a |
+| Resource local-only fetch 10k, limit 100 | 0.299 ms | n/a | n/a | n/a |
 
 Android emulator storage:
 
@@ -375,12 +451,20 @@ JSON and request pipeline:
 
 | Platform | Operation | Koma | Foundation | YYJSON | Other |
 | --- | --- | ---: | ---: | ---: | ---: |
-| Apple/Darwin | Decode 1k records | 0.409 ms | 2.839 ms | 0.874 ms | n/a |
-| Apple/Darwin | Encode 1k records | 0.594 ms | 2.288 ms | 0.391 ms | n/a |
-| Apple/Darwin | Mock GET + decode 1k | 2.621 ms | n/a | n/a | Alamofire 3.400 ms, Moya 3.125 ms, Apollo 85.000 ms |
-| Apple/Darwin | Resource `networkFirstFallback` 1k | 2.320 ms | n/a | n/a | URLSession resource 4.334 ms |
+| Apple/Darwin | Decode 1k records | 0.180 ms | 1.351 ms | 0.530 ms | n/a |
+| Apple/Darwin | Encode 1k records | 0.348 ms | 1.115 ms | 0.425 ms | n/a |
+| Apple/Darwin | Mock GET + decode 1k | 0.270 ms | URLSession + `JSONDecoder` 1.421 ms | n/a | Alamofire 1.516 ms, Moya 1.529 ms, Apollo 39.322 ms |
+| Apple/Darwin | Resource `networkFirstFallback` 1k | 2.210 ms | n/a | n/a | URLSession resource 2.570 ms |
 | Android emulator | Decode 1k records | 0.420 ms | 1.640 ms | 0.949 ms | n/a |
 | Android emulator | Encode 1k records | 0.591 ms | 1.378 ms | 0.739 ms | n/a |
+
+Local search and memory-store validation:
+
+| Operation | Koma exact | Koma quantized | Raw SQLite | Raw quantized | GRDB |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| FTS5 keyword search 10k | 0.414 ms | n/a | 0.476 ms | n/a | 0.438 ms |
+| Vector nearest 10k x 384 | 7.389 ms | 2.384 ms | 7.729 ms | 2.460 ms | 8.774 ms |
+| Hybrid keyword + vector 10k x 384 | 7.950 ms | 3.355 ms | 8.634 ms | 3.625 ms | 9.650 ms |
 
 Full methodology and historical runs live in [Benchmark Results](docs/benchmarks/results.md). Each publishable run should include raw output plus metadata for the Koma revision, Swift toolchain, platform, and command.
 

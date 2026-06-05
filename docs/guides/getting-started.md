@@ -2,7 +2,7 @@
 
 Koma has two entry points:
 
-- Storage-only mode for a typed SQLite ORM.
+- Storage-only mode for a small typed SQLite ORM that stays close to raw SQLite performance.
 - Storage plus REST refresh for offline read-first networked apps.
 
 ## Storage-Only

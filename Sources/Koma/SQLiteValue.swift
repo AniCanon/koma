@@ -9,6 +9,37 @@ public enum KomaSQLiteStorageValue: Equatable, Sendable {
     case blob(Data)
 }
 
+/// Literal conformances so raw-SQL arguments can be written as `[1, "term", 3.5, true]`.
+extension KomaSQLiteStorageValue: ExpressibleByIntegerLiteral {
+    public init(integerLiteral value: Int64) {
+        self = .integer(value)
+    }
+}
+
+extension KomaSQLiteStorageValue: ExpressibleByFloatLiteral {
+    public init(floatLiteral value: Double) {
+        self = .real(value)
+    }
+}
+
+extension KomaSQLiteStorageValue: ExpressibleByStringLiteral {
+    public init(stringLiteral value: String) {
+        self = .text(value)
+    }
+}
+
+extension KomaSQLiteStorageValue: ExpressibleByBooleanLiteral {
+    public init(booleanLiteral value: Bool) {
+        self = .integer(value ? 1 : 0)
+    }
+}
+
+extension KomaSQLiteStorageValue: ExpressibleByNilLiteral {
+    public init(nilLiteral: ()) {
+        self = .null
+    }
+}
+
 @_documentation(visibility: private)
 public extension KomaSQLiteStorageValue {
     init(_ value: String) {

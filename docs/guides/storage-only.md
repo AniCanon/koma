@@ -1,8 +1,8 @@
 # Storage-Only Mode
 
-Koma can be used as a typed SQLite ORM without the network layer.
+Koma can be used as a small typed SQLite ORM without the network layer.
 
-Use this mode when an app already has its own networking, does not need REST-backed refresh, or only wants a local database with typed queries, writes, migrations, and optional hydrated models.
+Use this mode when an app already has its own networking, does not need REST-backed refresh, or only wants a local database with typed queries, writes, migrations, local search, and optional hydrated models. Koma should be read as an ergonomic layer close to raw SQLite performance, not as a replacement for every hand-written SQL workload.
 
 ## Dependencies
 
@@ -134,6 +134,53 @@ let projects = try await store.query(ProjectRecord.self)
     .where(CharacterRecord.self) { $0.name.hasPrefix("A") }
     .fetch()
 ```
+
+## Add Raw SQL and Local Search
+
+Storage-only apps can use Koma's SQLite escape hatches without adopting the REST layer.
+
+Use `rawQuery` for custom SQLite and `rawExecute` for custom writes. When a raw write changes tables that live observations depend on, pass the table names through `invalidating:`.
+
+```swift
+let rows = try await store.rawQuery(
+    "SELECT id, name FROM projects WHERE name LIKE ? ORDER BY name LIMIT ?",
+    arguments: ["A%", 20]
+)
+
+try await store.rawExecute(
+    "UPDATE projects SET name = ? WHERE id = ?",
+    arguments: ["Akira Boards", "1"],
+    invalidating: [ProjectRecord.komaTableName]
+)
+```
+
+For local search, Koma can maintain FTS5 indexes and vector sidecar indexes while still hydrating typed records.
+
+```swift
+try await store.createFullTextIndex(for: ProjectRecord.self, indexing: \.name)
+
+let keywordMatches = try await store.fullTextSearch(
+    ProjectRecord.self,
+    matching: "akira",
+    limit: 20
+)
+```
+
+For embedding search, store vectors as `Data` with `KomaVector.encode`.
+
+```swift
+try await store.createQuantizedVectorIndex(for: MemoryRecord.self, on: \.embedding)
+
+let nearest = try await store.nearestQuantized(
+    MemoryRecord.self,
+    to: queryEmbedding,
+    on: \.embedding,
+    limit: 20,
+    overfetch: 10
+)
+```
+
+Quantized vector search is a recall optimization. It uses the int8 sidecar to choose candidates quickly, then reranks candidates with full-precision cosine before returning typed records.
 
 ## Add Network Later
 

@@ -4,9 +4,117 @@ Koma publishes small p50 snapshots in the README and keeps fuller benchmark cont
 
 | Koma Version | Environment | Swift | Artifact | Notes |
 | --- | --- | --- | --- | --- |
+| SQLite raw SQL branch validation | Darwin 25.5.0 arm64, SwiftPM benchmark runner | Swift 6.3 release | `.benchmark-results/feat-sqlite-raw-sql-clean-20260605` | Clean-branch validation for raw SQL, FTS5, exact vector search, quantized vector search, hybrid search, storage, JSON, and request-pipeline benchmarks. |
 | Live observation branch | Darwin 25.4.0 arm64, SwiftPM benchmark runner | Swift 6.3 release | `.benchmark-results/live-observation-final-20260525` | Final host pass for live observation, fused JSON-to-SQLite binding, generated key dispatch, and projection fast paths. Host GRDB was disabled for this run because this Swift 6.3 toolchain still fails the GRDB benchmark target in release mode. |
 | Open-source prep | Darwin 25.4.0 arm64, SwiftPM benchmark runner | Swift 6.3 release | `.benchmark-results/koma-open-source-apple-20260524` | Apple-platform baseline for the iOS-side runtime, not an on-device iOS claim. Host GRDB storage comparison was disabled for this run because this Swift 6.3 toolchain crashed while compiling the GRDB benchmark target. |
 | Open-source prep | Google sdk_gphone16k_arm64 emulator, Android 17 SDK 37 | Swift 6.3 release Android SDK | `.benchmark-results/koma-open-source-android-emulator-20260524` | Android smoke baseline with Koma, raw SQLite, GRDB, and SQLite.swift. |
+
+## SQLite Raw SQL Branch Validation
+
+Captured June 5, 2026 from the `feat/sqlite-raw-sql` working tree after adding raw SQL, FTS5, exact vector search, trigger-maintained quantized vector indexes, and hybrid search.
+
+- Command: `BENCHMARK_DISABLE_JEMALLOC=true scripts/benchmark-official.sh .benchmark-results/feat-sqlite-raw-sql-clean-20260605 --metric wallClock --no-progress --time-units microseconds`
+- Platform: Darwin 25.5.0 arm64
+- Swift: Apple Swift 6.3
+- Artifact: `.benchmark-results/feat-sqlite-raw-sql-clean-20260605`
+- Git revision: `780c8232b946902202d36bf37c11ccbf46ade23f`
+- Git dirty: false
+
+Lower is better.
+
+### Storage and Local Resource
+
+| Benchmark | p50 wall clock | p90 wall clock | Samples |
+| --- | ---: | ---: | ---: |
+| `koma.sqlite.open.ensureSchema` | 0.866 ms | 1.126 ms | 1076 |
+| `grdb.sqlite.open.ensureSchema` | 0.344 ms | 0.380 ms | 2793 |
+| `coredata.sqlite.open.ensureSchema` | 1.255 ms | 1.385 ms | 782 |
+| `koma.sqlite.batchUpsert.1k` | 1.532 ms | 1.712 ms | 618 |
+| `koma.sqlite.steadyUpsert.1k` | 1.546 ms | 1.939 ms | 595 |
+| `koma.sqlite.observedUpsert.1k.limit100` | 1.707 ms | 2.109 ms | 542 |
+| `koma.sqlite.fusedJSONUpsert.1k` | 1.693 ms | 1.804 ms | 565 |
+| `koma.sqlite.fusedJSONSteadyUpsert.1k` | 1.618 ms | 1.729 ms | 597 |
+| `rawsqlite.batchUpsert.1k` | 1.789 ms | 2.044 ms | 538 |
+| `grdb.sqlite.batchUpsert.1k` | 7.938 ms | 8.106 ms | 126 |
+| `coredata.sqlite.batchInsert.1k` | 6.996 ms | 7.225 ms | 141 |
+| `koma.sqlite.filteredOrderedFetch.10k.limit100` | 0.284 ms | 0.294 ms | 3390 |
+| `rawsqlite.filteredOrderedFetch.10k.limit100` | 0.283 ms | 0.305 ms | 3314 |
+| `grdb.sqlite.filteredOrderedFetch.10k.limit100` | 0.344 ms | 0.364 ms | 2798 |
+| `coredata.sqlite.filteredOrderedFetch.10k.limit100` | 0.537 ms | 0.562 ms | 1806 |
+| `koma.sqlite.innerJoinFilter.10k.limit100` | 4.461 ms | 4.682 ms | 220 |
+| `rawsqlite.innerJoinFilter.10k.limit100` | 4.641 ms | 5.038 ms | 212 |
+| `koma.sqlite.rightJoinMatched.10k.limit100` | 5.030 ms | 5.530 ms | 194 |
+| `rawsqlite.rightJoinMatched.10k.limit100` | 4.530 ms | 4.649 ms | 220 |
+| `koma.sqlite.leftJoinMissing.10k.limit100` | 7.053 ms | 7.369 ms | 140 |
+| `rawsqlite.leftJoinMissing.10k.limit100` | 8.057 ms | 10.109 ms | 117 |
+| `koma.resource.localOnly.10k.limit100` | 0.299 ms | 0.312 ms | 3219 |
+| `koma.resource.networkFirstFallback.1k` | 2.210 ms | 2.327 ms | 446 |
+
+### Search and Vector
+
+| Benchmark | p50 wall clock | p90 wall clock | Samples |
+| --- | ---: | ---: | ---: |
+| `koma.sqlite.fullTextSearch.10k` | 0.414 ms | 0.424 ms | 2365 |
+| `rawsqlite.fullTextSearch.10k` | 0.476 ms | 0.545 ms | 1946 |
+| `grdb.sqlite.fullTextSearch.10k` | 0.438 ms | 0.458 ms | 2212 |
+| `koma.sqlite.nearest.10k.dim384` | 7.389 ms | 7.897 ms | 133 |
+| `rawsqlite.nearest.10k.dim384` | 7.729 ms | 8.184 ms | 128 |
+| `grdb.sqlite.nearest.10k.dim384` | 8.774 ms | 8.954 ms | 114 |
+| `koma.sqlite.nearestQuantized.10k.dim384` | 2.384 ms | 2.714 ms | 404 |
+| `rawsqlite.nearestQuantized.10k.dim384` | 2.460 ms | 2.560 ms | 402 |
+| `koma.sqlite.hybridSearch.10k.dim384` | 7.950 ms | 8.421 ms | 124 |
+| `rawsqlite.hybridSearch.10k.dim384` | 8.634 ms | 9.732 ms | 112 |
+| `grdb.sqlite.hybridSearch.10k.dim384` | 9.650 ms | 10.150 ms | 103 |
+| `koma.sqlite.hybridSearchQuantized.10k.dim384` | 3.355 ms | 3.791 ms | 285 |
+| `rawsqlite.hybridSearchQuantized.10k.dim384` | 3.625 ms | 4.057 ms | 268 |
+| `koma.vector.cosineScan.10k.dim384` | 1.944 ms | 1.972 ms | 511 |
+| `koma.vector.encode.1k.dim384` | 0.081 ms | 0.085 ms | 10000 |
+| `koma.vector.decode.1k.dim384` | 0.062 ms | 0.065 ms | 10000 |
+| `koma.fusion.rrf.2x1k` | 4.395 ms | 4.522 ms | 226 |
+
+### JSON Codecs
+
+| Benchmark | p50 wall clock | p90 wall clock | Samples |
+| --- | ---: | ---: | ---: |
+| `network.koma.json.records.decode.10` | 0.002 ms | 0.002 ms | 10000 |
+| `network.foundation.jsondecoder.decode.10` | 0.015 ms | 0.016 ms | 10000 |
+| `network.yyjson.decoder.decode.10` | 0.006 ms | 0.006 ms | 10000 |
+| `network.koma.json.records.decode.1k` | 0.180 ms | 0.190 ms | 5485 |
+| `network.foundation.jsondecoder.decode.1k` | 1.351 ms | 1.419 ms | 735 |
+| `network.yyjson.decoder.decode.1k` | 0.530 ms | 0.552 ms | 1879 |
+| `network.koma.json.records.decode.10k` | 1.803 ms | 1.885 ms | 552 |
+| `network.foundation.jsondecoder.decode.10k` | 13.656 ms | 17.285 ms | 70 |
+| `network.yyjson.decoder.decode.10k` | 5.210 ms | 5.349 ms | 192 |
+| `network.koma.json.records.encode.10` | 0.003 ms | 0.004 ms | 10000 |
+| `network.foundation.jsonencoder.encode.10` | 0.012 ms | 0.012 ms | 10000 |
+| `network.yyjson.encoder.encode.10` | 0.005 ms | 0.005 ms | 10000 |
+| `network.koma.json.records.encode.1k` | 0.348 ms | 0.368 ms | 2852 |
+| `network.foundation.jsonencoder.encode.1k` | 1.115 ms | 1.188 ms | 889 |
+| `network.yyjson.encoder.encode.1k` | 0.425 ms | 0.459 ms | 2298 |
+| `network.koma.json.records.encode.10k` | 3.451 ms | 3.746 ms | 283 |
+| `network.foundation.jsonencoder.encode.10k` | 11.076 ms | 11.952 ms | 90 |
+| `network.yyjson.encoder.encode.10k` | 4.123 ms | 4.530 ms | 237 |
+
+### Transport and Request Pipeline
+
+| Benchmark | p50 wall clock | p90 wall clock | Samples |
+| --- | ---: | ---: | ---: |
+| `network.koma.transport.get.data.1k` | 0.077 ms | 0.091 ms | 10000 |
+| `network.urlsession.get.data.10` | 0.070 ms | 0.078 ms | 10000 |
+| `network.urlsession.get.data.1k` | 0.072 ms | 0.080 ms | 10000 |
+| `network.urlsession.get.data.10k` | 0.098 ms | 0.106 ms | 9083 |
+| `network.koma.transport.get.jsonrecord.10` | 0.076 ms | 0.086 ms | 10000 |
+| `network.koma.transport.get.jsonrecord.1k` | 0.270 ms | 0.291 ms | 3503 |
+| `network.koma.transport.get.jsonrecord.10k` | 1.919 ms | 2.016 ms | 513 |
+| `network.koma.transport.get.decode.1k` | 1.502 ms | 1.705 ms | 645 |
+| `network.koma.transport.get.decode.headers.1k` | 1.455 ms | 1.553 ms | 674 |
+| `network.urlsession.get.decode.10` | 0.092 ms | 0.109 ms | 9062 |
+| `network.urlsession.get.decode.1k` | 1.421 ms | 1.462 ms | 695 |
+| `network.urlsession.get.decode.10k` | 13.378 ms | 13.697 ms | 75 |
+| `network.koma.resource.urlsession.networkFirstFallback.1k` | 2.570 ms | 2.955 ms | 378 |
+| `network.alamofire.get.decode.1k` | 1.516 ms | 1.698 ms | 641 |
+| `network.moya.get.decode.1k` | 1.529 ms | 1.612 ms | 644 |
+| `network.apollo.query.networkOnly.1k` | 39.322 ms | 42.041 ms | 26 |
 
 ## Live Observation Branch
 
