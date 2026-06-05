@@ -18,6 +18,17 @@ struct KomaVectorQuantizationTests {
     }
 
     @Test
+    func `vector encode decode round trips doubles`() {
+        let vector = [1.0, -0.5, 0.25, 0]
+        #expect(KomaVector.decode(KomaVector.encode(vector)) == vector)
+    }
+
+    @Test
+    func `vector decode rejects malformed blobs`() {
+        #expect(KomaVector.decode(Data([1, 2, 3])).isEmpty)
+    }
+
+    @Test
     func `int8 over-fetch contains the exact nearest neighbors`() {
         let dimension = 64
         let documents = (0 ..< 300).map { vector(seed: UInt64($0), dimension: dimension) }

@@ -4,7 +4,8 @@ import Koma
 
 public extension SQLiteKomaStore {
     /// Creates an FTS5 full-text index over a text column of `Record`, kept in sync with the
-    /// base table via triggers. Idempotent — safe to call on every launch (like `ensureSchema`).
+    /// base table via triggers. Idempotent, but it rebuilds from existing rows, so prefer calling
+    /// it during setup or migrations rather than on a hot path.
     ///
     /// The index is an external-content FTS5 table named `<table>_fts`; the base table remains
     /// the source of truth. Query it with `fullTextSearch(_:matching:limit:)`.

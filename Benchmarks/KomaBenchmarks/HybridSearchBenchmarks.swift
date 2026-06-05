@@ -197,7 +197,7 @@ func registerHybridSearchBenchmarks() {
     }
 }
 
-// MARK: Raw SQLite (hand-written C API) — the zero-framework floor + quantized prototype.
+// MARK: Raw SQLite (hand-written C API) — the zero-framework floor.
 
 func registerRawSQLiteMemoryBenchmarks() {
     let fixtures = MemoryBenchmarkFixtures.self
@@ -243,7 +243,7 @@ func registerRawSQLiteMemoryBenchmarks() {
         benchmark.stopMeasurement()
     }
 
-    // MARK: int8 quantized scan + full-precision rerank (Tier 1+2 prototype).
+    // MARK: int8 quantized scan + full-precision rerank.
 
     Benchmark("rawsqlite.nearestQuantized.10k.dim384") { benchmark in
         let database = try await BenchmarkFixtureCache.shared.value("raw-memories-quantized") {

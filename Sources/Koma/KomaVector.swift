@@ -11,8 +11,23 @@ public enum KomaVector {
 
     /// Decodes a contiguous `Float64` BLOB (see `encode(_:)`) back into a vector.
     public static func decode(_ data: Data) -> [Double] {
-        guard !data.isEmpty else { return [] }
-        return data.withUnsafeBytes { Array($0.bindMemory(to: Double.self)) }
+        let stride = MemoryLayout<Double>.stride
+        guard !data.isEmpty, data.count.isMultiple(of: stride) else { return [] }
+        return data.withUnsafeBytes { raw in
+            guard let baseAddress = raw.baseAddress else { return [] }
+            if Int(bitPattern: baseAddress).isMultiple(of: MemoryLayout<Double>.alignment) {
+                return Array(raw.bindMemory(to: Double.self))
+            }
+
+            var vector: [Double] = []
+            vector.reserveCapacity(raw.count / stride)
+            var offset = 0
+            while offset < raw.count {
+                vector.append(raw.loadUnaligned(fromByteOffset: offset, as: Double.self))
+                offset += stride
+            }
+            return vector
+        }
     }
 
     /// Quantizes a vector to one signed byte per dimension for a compact, scan-friendly code.
