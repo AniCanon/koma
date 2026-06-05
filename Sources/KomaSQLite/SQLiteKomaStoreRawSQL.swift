@@ -110,7 +110,7 @@ extension SQLiteKomaStore {
         }
     }
 
-    internal static func bind(_ arguments: [KomaSQLiteStorageValue], to statement: OpaquePointer) throws {
+    static func bind(_ arguments: [KomaSQLiteStorageValue], to statement: OpaquePointer) throws {
         guard !arguments.isEmpty else { return }
         var binder = SQLiteStatementBinder(statement: statement)
         for argument in arguments {
@@ -124,7 +124,7 @@ extension SQLiteKomaStore {
         }
     }
 
-    internal static func columnValues(statement: OpaquePointer, columnCount: Int) -> [KomaSQLiteStorageValue] {
+    static func columnValues(statement: OpaquePointer, columnCount: Int) -> [KomaSQLiteStorageValue] {
         var values: [KomaSQLiteStorageValue] = []
         values.reserveCapacity(columnCount)
         for offset in 0 ..< columnCount {

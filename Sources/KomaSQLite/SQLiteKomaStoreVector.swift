@@ -185,12 +185,11 @@ public extension SQLiteKomaStore {
         await waitForTransactionAccess()
 
         let keyword = try fullTextRecords(type, matching: query, limit: candidateLimit)
-        let semantic: [Record]
-        switch vectorSearch {
+        let semantic: [Record] = switch vectorSearch {
         case .exact:
-            semantic = try nearestRecords(type, to: vector, on: vectorKeyPath, limit: candidateLimit).map(\.record)
+            try nearestRecords(type, to: vector, on: vectorKeyPath, limit: candidateLimit).map(\.record)
         case let .quantized(overfetch):
-            semantic = try nearestQuantizedRecords(
+            try nearestQuantizedRecords(
                 type,
                 to: vector,
                 on: vectorKeyPath,
@@ -256,9 +255,7 @@ extension SQLiteKomaStore {
         let indexTable = Self.quote(Self.quantizedVectorIndexTableName(table: tableName, column: columnName))
 
         let winners = try scoreQuantizedVectorIndex(
-            indexTable: indexTable,
-            baseTable: table,
-            column: column,
+            selection: (indexTable: indexTable, baseTable: table, column: column),
             to: vector,
             limit: limit,
             overfetch: overfetch
@@ -331,9 +328,7 @@ extension SQLiteKomaStore {
     /// Scans the int8 sidecar for candidates, then reranks those candidates with exact Float64
     /// cosine using the base table's original embedding blob. Inputs must be pre-quoted.
     func scoreQuantizedVectorIndex(
-        indexTable: String,
-        baseTable: String,
-        column: String,
+        selection: (indexTable: String, baseTable: String, column: String),
         to query: [Double],
         limit: Int,
         overfetch: Int
@@ -344,7 +339,7 @@ extension SQLiteKomaStore {
         guard dimension > 0 else { return [] }
 
         let candidateLimit = max(limit, limit * overfetch)
-        let candidates = try withStatement("SELECT rowid, code FROM \(indexTable)") { statement in
+        let candidates = try withStatement("SELECT rowid, code FROM \(selection.indexTable)") { statement in
             var scored: [(rowid: Int64, score: Int)] = []
             while true {
                 switch sqlite3_step(statement) {
@@ -372,7 +367,7 @@ extension SQLiteKomaStore {
         guard queryNorm > 0 else { return [] }
 
         let ids = candidates.map(String.init).joined(separator: ", ")
-        return try withStatement("SELECT rowid, \(column) FROM \(baseTable) WHERE rowid IN (\(ids))") { statement in
+        return try withStatement("SELECT rowid, \(selection.column) FROM \(selection.baseTable) WHERE rowid IN (\(ids))") { statement in
             var reranked: [(rowid: Int64, similarity: Double)] = []
             while true {
                 switch sqlite3_step(statement) {
