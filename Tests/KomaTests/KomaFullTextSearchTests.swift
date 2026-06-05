@@ -41,6 +41,22 @@ struct KomaFullTextSearchTests {
     }
 
     @Test
+    func `creating a full-text index backfills existing rows`() async throws {
+        let path = FileManager.default.temporaryDirectory
+            .appendingPathComponent("koma-fts-backfill-\(UUID().uuidString).sqlite").path
+        let store = try await SQLiteKomaStore(path: path)
+        try await store.ensureSchema(for: MemoryRecord.self)
+        try await store.upsert([
+            MemoryRecord(id: "1", content: "existing embeddings note")
+        ])
+
+        try await store.createFullTextIndex(for: MemoryRecord.self, indexing: \.content)
+
+        let hits = try await store.fullTextSearch(MemoryRecord.self, matching: "embeddings")
+        #expect(hits.map(\.id) == ["1"])
+    }
+
+    @Test
     func `deleting a record removes it from the full-text index`() async throws {
         let store = try await makeStore()
         try await store.upsert([MemoryRecord(id: "1", content: "embeddings rule")])

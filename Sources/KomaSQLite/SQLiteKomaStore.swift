@@ -64,6 +64,7 @@ public actor SQLiteKomaStore: KomaStore {
             throw SQLiteKomaError.openFailed(message)
         }
         self.connection = SQLiteConnection(rawValue: connection)
+        try installVectorFunctions()
         try execute("PRAGMA journal_mode = WAL")
         try execute("PRAGMA foreign_keys = ON")
 

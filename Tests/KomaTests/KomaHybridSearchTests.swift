@@ -43,6 +43,53 @@ struct KomaHybridSearchTests {
     }
 
     @Test
+    func `quantized nearest backfills existing rows and reranks with exact cosine`() async throws {
+        let store = try await makeStore()
+        try await store.upsert([
+            HybridMemoryRecord(id: "a", content: "identical", embedding: [1, 0, 0]),
+            HybridMemoryRecord(id: "b", content: "orthogonal", embedding: [0, 1, 0]),
+            HybridMemoryRecord(id: "c", content: "close", embedding: [0.9, 0.1, 0])
+        ])
+        try await store.createQuantizedVectorIndex(for: HybridMemoryRecord.self, on: \.embedding)
+
+        let near = try await store.nearestQuantized(
+            HybridMemoryRecord.self,
+            to: [1, 0, 0],
+            on: \.embedding,
+            limit: 2,
+            overfetch: 3
+        )
+
+        #expect(near.map(\.record.id) == ["a", "c"])
+        #expect(near[0].similarity > near[1].similarity)
+    }
+
+    @Test
+    func `quantized vector index tracks later updates and deletes`() async throws {
+        let store = try await makeStore()
+        try await store.createQuantizedVectorIndex(for: HybridMemoryRecord.self, on: \.embedding)
+        try await store.upsert([
+            HybridMemoryRecord(id: "a", content: "first", embedding: [1, 0, 0]),
+            HybridMemoryRecord(id: "b", content: "second", embedding: [0, 1, 0])
+        ])
+
+        _ = try await store.delete(HybridMemoryRecord.self, id: "a")
+        try await store.upsert([
+            HybridMemoryRecord(id: "b", content: "second", embedding: [1, 0, 0])
+        ])
+
+        let near = try await store.nearestQuantized(
+            HybridMemoryRecord.self,
+            to: [1, 0, 0],
+            on: \.embedding,
+            limit: 1
+        )
+
+        #expect(near.map(\.record.id) == ["b"])
+        #expect(near[0].similarity == 1)
+    }
+
+    @Test
     func `reciprocal rank fusion merges rankings by identity`() {
         func record(_ id: String) -> HybridMemoryRecord {
             HybridMemoryRecord(id: id, content: "", embedding: [])
@@ -74,6 +121,29 @@ struct KomaHybridSearchTests {
             on: \.embedding,
             identifiedBy: \.id,
             limit: 3
+        )
+
+        #expect(results.map(\.id) == ["3", "1", "2"])
+    }
+
+    @Test
+    func `hybrid search can use quantized vector recall`() async throws {
+        let store = try await makeStore()
+        try await store.createQuantizedVectorIndex(for: HybridMemoryRecord.self, on: \.embedding)
+        try await store.upsert([
+            HybridMemoryRecord(id: "3", content: "embeddings embeddings embeddings", embedding: [1, 0, 0]),
+            HybridMemoryRecord(id: "1", content: "embeddings once", embedding: [0, 1, 0]),
+            HybridMemoryRecord(id: "2", content: "cooking pasta", embedding: [0.9, 0.1, 0])
+        ])
+
+        let results = try await store.hybridSearch(
+            HybridMemoryRecord.self,
+            matching: "embeddings",
+            near: [1, 0, 0],
+            on: \.embedding,
+            identifiedBy: \.id,
+            limit: 3,
+            vectorSearch: .quantized(overfetch: 3)
         )
 
         #expect(results.map(\.id) == ["3", "1", "2"])

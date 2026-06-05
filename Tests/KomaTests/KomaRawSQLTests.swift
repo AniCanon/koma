@@ -112,6 +112,69 @@ struct KomaRawSQLTests {
     }
 
     @Test
+    func `raw writes from another task wait for the active transaction`() async throws {
+        let store = try await makeStore()
+        try await store.rawExecute("CREATE TABLE t (id INTEGER PRIMARY KEY)")
+        let gate = TransactionGate()
+
+        let transaction = Task {
+            do {
+                try await store.transaction { _ in
+                    try await store.rawExecute("INSERT INTO t (id) VALUES (1)")
+                    await gate.open()
+                    try await Task.sleep(for: .milliseconds(50))
+                    throw RawSQLRollbackError.expected
+                }
+                Issue.record("Expected transaction to roll back.")
+            } catch RawSQLRollbackError.expected {}
+        }
+
+        await gate.wait()
+        let outsideWrite = Task {
+            try await store.rawExecute("INSERT INTO t (id) VALUES (2)")
+        }
+
+        try await transaction.value
+        _ = try await outsideWrite.value
+
+        let rows = try await store.rawQuery("SELECT id FROM t ORDER BY id")
+        #expect(try rows.map { try $0.int("id") } == [2])
+    }
+
+    @Test
+    func `raw writes can invalidate live observations`() async throws {
+        let store = try await makeStore()
+        try await store.ensureSchema(for: RawPersonRecord.self)
+
+        let probe = ObservationProbe<[RawPersonRecord]>()
+        let observation = Task {
+            for try await records in store.query(RawPersonRecord.self)
+                .order(by: \.age)
+                .observe()
+            {
+                await probe.append(records)
+            }
+        }
+
+        _ = try await withObservationTimeout(.seconds(1)) {
+            await probe.waitForCount(1)
+        }
+
+        try await store.rawExecute(
+            "INSERT INTO raw_people (id, name, age) VALUES (?, ?, ?)",
+            arguments: ["1", "Ada", 36],
+            invalidating: [RawPersonRecord.komaTableName]
+        )
+
+        let emissions = try await withObservationTimeout(.seconds(1)) {
+            await probe.waitForCount(2)
+        }
+        #expect(emissions[1] == [RawPersonRecord(id: "1", name: "Ada", age: 36)])
+
+        observation.cancel()
+    }
+
+    @Test
     func `full-text search works via raw SQL with FTS5 MATCH and bm25 ranking`() async throws {
         let store = try await makeStore()
         try await store.rawExecute("CREATE VIRTUAL TABLE memories USING fts5(content)")
@@ -131,4 +194,8 @@ struct KomaRawSQLTests {
         #expect(hits.count == 1)
         #expect(try hits[0].int("rowid") == 1)
     }
+}
+
+private enum RawSQLRollbackError: Error {
+    case expected
 }

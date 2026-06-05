@@ -69,3 +69,10 @@ public enum KomaVector {
         return magnitude == 0 ? 0 : dot / magnitude
     }
 }
+
+/// Search strategy for APIs that can choose between exact vector scan and a compact quantized
+/// pre-filter followed by exact reranking.
+public enum KomaVectorSearchMode: Equatable, Sendable {
+    case exact
+    case quantized(overfetch: Int = 10)
+}

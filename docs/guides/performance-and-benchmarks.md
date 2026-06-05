@@ -14,6 +14,9 @@ Koma is designed to keep app code high level while moving the repetitive work in
 - Resource fetches persist normalized records first, then reuse the same local query engine for filtering, sorting, limits, and relationships.
 - Live observations use table invalidation plus buffered signals, so repeated writes coalesce while an observer is refetching.
 - Relationship `.include(...)` batch-loads related records and avoids N+1 query patterns.
+- Raw SQL, FTS5, and vector search APIs stay on the same serialized SQLite actor and reuse generated row hydration instead of forcing users through a separate database stack.
+- Exact vector search scans a lean `rowid + embedding` projection, scores `Float64` blobs directly from SQLite row buffers, and hydrates only the winners.
+- Quantized vector search uses a trigger-maintained int8 sidecar as a fast pre-filter, then reranks over-fetched candidates with full-precision cosine.
 - The HTTP layer stays close to `URLSession`; plugins compose auth, retry, and logging without hiding the transport.
 
 Raw SQLite can still win some narrow microbenchmarks because it has no framework abstraction. Koma's target is to stay close to raw SQLite while preserving a typed, testable API.
@@ -31,7 +34,7 @@ The official script records metadata with each run:
 - command
 - raw benchmark output
 
-The current suite covers raw SQLite, Koma SQLite, GRDB, Core Data, SwiftData, Koma resource refresh, Koma local resource reads, URLSession, Alamofire, Moya, Apollo, and Koma's optimized JSON record path where the platform supports them.
+The current suite covers raw SQLite, Koma SQLite, GRDB, Core Data, SwiftData when explicitly enabled from an Xcode toolchain, Koma resource refresh, Koma local resource reads, FTS5, exact vector search, quantized vector search, hybrid search, URLSession, Alamofire, Moya, Apollo, and Koma's optimized JSON record path where the platform supports them.
 
 Relation loading, eager includes, refresh due scans, large `IN` predicates, and migration-heavy workloads are the next benchmark areas to add before quoting broader ORM claims.
 
@@ -44,6 +47,20 @@ Use raw SQLite as the lower-bound storage baseline. Use GRDB as the mature Swift
 For networking, compare transport-only numbers against `URLSession` and full decode paths against URLSession, Alamofire, Moya, and Apollo where each tool's model applies. Koma should be transparent when it is measuring REST and when Apollo is measuring a GraphQL client stack.
 
 Official numbers should quote p50 and p90 from `scripts/benchmark-official.sh`, include the benchmark artifact path, and avoid claims from uncommitted local runs.
+
+## SQLite Search
+
+Koma's search APIs are intended for single-device local memory stores and other app-local corpora:
+
+- `rawQuery` and `rawExecute` expose custom SQLite with typed arguments. Raw writes can pass `invalidating: [tableName]` so live observations refetch without Koma trying to parse arbitrary SQL.
+- `createFullTextIndex` builds an external-content FTS5 table, creates insert/update/delete triggers, and rebuilds from existing rows so migrations can add search later.
+- `fullTextSearch` returns typed records ranked by FTS5 relevance.
+- `nearest` performs exact cosine search over `KomaVector.encode` `Float64` blobs. It scans every matching row, so it is predictable and exact but O(n).
+- `createQuantizedVectorIndex` builds a sidecar table named `<table>_<column>_i8`, backfills it, and keeps it current with SQLite triggers.
+- `nearestQuantized` scans the int8 sidecar, over-fetches candidates, and reranks those candidates with full-precision cosine before returning typed records.
+- `hybridSearch` fuses FTS5 keyword recall and vector recall with reciprocal-rank fusion. Use `vectorSearch: .quantized(overfetch:)` only after creating the quantized vector index.
+
+Quantized search is a recall optimization, not a replacement for exact scoring. Koma uses it to pick candidates quickly and still reports similarities from full-precision reranking.
 
 ## Observation
 

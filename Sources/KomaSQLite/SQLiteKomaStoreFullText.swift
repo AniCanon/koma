@@ -11,7 +11,9 @@ public extension SQLiteKomaStore {
     func createFullTextIndex<Record: KomaEntityRecord>(
         for type: Record.Type,
         indexing keyPath: KeyPath<Record.Columns, KomaColumn<some Any>>
-    ) throws {
+    ) async throws {
+        await waitForTransactionAccess()
+
         let table = Record.komaTableName
         let ftsTable = "\(table)_fts"
         let column = Record.columns[keyPath: keyPath].name
@@ -19,13 +21,14 @@ public extension SQLiteKomaStore {
         let qTable = Self.quote(table)
         let qFTS = Self.quote(ftsTable)
         let qColumn = Self.quote(column)
+        let tableLiteral = Self.stringLiteral(table)
 
         // Identifying the FTS table by its own name inside an INSERT issues FTS5's special
         // 'delete' command, which is how external-content indexes are kept consistent.
         try execute(
             """
             CREATE VIRTUAL TABLE IF NOT EXISTS \(qFTS)
-                USING fts5(\(qColumn), content='\(table)', content_rowid='rowid');
+                USING fts5(\(qColumn), content=\(tableLiteral), content_rowid='rowid');
 
             CREATE TRIGGER IF NOT EXISTS \(Self.quote("\(ftsTable)_ai")) AFTER INSERT ON \(qTable) BEGIN
                 INSERT INTO \(qFTS)(rowid, \(qColumn)) VALUES (new.rowid, new.\(qColumn));
@@ -39,6 +42,8 @@ public extension SQLiteKomaStore {
                 INSERT INTO \(qFTS)(\(qFTS), rowid, \(qColumn)) VALUES ('delete', old.rowid, old.\(qColumn));
                 INSERT INTO \(qFTS)(rowid, \(qColumn)) VALUES (new.rowid, new.\(qColumn));
             END;
+
+            INSERT INTO \(qFTS)(\(qFTS)) VALUES ('rebuild');
             """
         )
     }
@@ -48,6 +53,17 @@ public extension SQLiteKomaStore {
     ///
     /// `query` is an FTS5 MATCH expression (e.g. `"vector OR embeddings"`, `"semantic search"`).
     func fullTextSearch<Record: KomaSQLiteFastPathRecord>(
+        _ type: Record.Type,
+        matching query: String,
+        limit: Int? = nil
+    ) async throws -> [Record] {
+        await waitForTransactionAccess()
+        return try fullTextRecords(type, matching: query, limit: limit)
+    }
+}
+
+extension SQLiteKomaStore {
+    func fullTextRecords<Record: KomaSQLiteFastPathRecord>(
         _ type: Record.Type,
         matching query: String,
         limit: Int? = nil
@@ -68,6 +84,6 @@ public extension SQLiteKomaStore {
             arguments.append(.integer(Int64(limit)))
         }
 
-        return try rawQuery(Record.self, sql, arguments: arguments)
+        return try rawRecords(Record.self, sql, arguments: arguments)
     }
 }

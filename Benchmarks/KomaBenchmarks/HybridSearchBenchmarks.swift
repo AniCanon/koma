@@ -58,13 +58,16 @@ enum MemoryBenchmarkFixtures {
     static let codes: [Data] = vectors.map(KomaVector.encodeInt8)
     static let queryCode: Data = KomaVector.encodeInt8(query)
 
-    static func store(_ label: String) async throws -> SQLiteKomaStore {
+    static func store(_ label: String, quantized: Bool = false) async throws -> SQLiteKomaStore {
         try await BenchmarkFixtureCache.shared.value(label) {
             let path = BenchmarkFixtures.databasePath(label)
             let store = try await SQLiteKomaStore(path: path)
             try await store.ensureSchema(for: BenchmarkMemoryRecord.self)
             try await store.createFullTextIndex(for: BenchmarkMemoryRecord.self, indexing: \.content)
             try await store.upsert(records)
+            if quantized {
+                try await store.createQuantizedVectorIndex(for: BenchmarkMemoryRecord.self, on: \.embedding)
+            }
             return store
         }
     }
@@ -145,6 +148,17 @@ func registerHybridSearchBenchmarks() {
         benchmark.stopMeasurement()
     }
 
+    Benchmark("koma.sqlite.nearestQuantized.10k.dim384") { benchmark in
+        let store = try await fixtures.store("koma-memories-nearest-quantized", quantized: true)
+        let query = fixtures.query
+        benchmark.startMeasurement()
+        for _ in benchmark.scaledIterations {
+            let near = try await store.nearestQuantized(BenchmarkMemoryRecord.self, to: query, on: \.embedding, limit: 20)
+            blackHole(near.count)
+        }
+        benchmark.stopMeasurement()
+    }
+
     Benchmark("koma.sqlite.hybridSearch.10k.dim384") { benchmark in
         let store = try await fixtures.store("koma-memories-hybrid")
         let query = fixtures.query
@@ -157,6 +171,25 @@ func registerHybridSearchBenchmarks() {
                 on: \.embedding,
                 identifiedBy: \.id,
                 limit: 20
+            )
+            blackHole(results.count)
+        }
+        benchmark.stopMeasurement()
+    }
+
+    Benchmark("koma.sqlite.hybridSearchQuantized.10k.dim384") { benchmark in
+        let store = try await fixtures.store("koma-memories-hybrid-quantized", quantized: true)
+        let query = fixtures.query
+        benchmark.startMeasurement()
+        for _ in benchmark.scaledIterations {
+            let results = try await store.hybridSearch(
+                BenchmarkMemoryRecord.self,
+                matching: "swift",
+                near: query,
+                on: \.embedding,
+                identifiedBy: \.id,
+                limit: 20,
+                vectorSearch: .quantized(overfetch: 10)
             )
             blackHole(results.count)
         }
@@ -228,6 +261,32 @@ func registerRawSQLiteMemoryBenchmarks() {
         benchmark.startMeasurement()
         for _ in benchmark.scaledIterations {
             try blackHole(database.nearestQuantized(queryCode: queryCode, query: query, limit: 20, overfetch: 10).count)
+        }
+        benchmark.stopMeasurement()
+    }
+
+    Benchmark("rawsqlite.hybridSearchQuantized.10k.dim384") { benchmark in
+        let database = try await BenchmarkFixtureCache.shared.value("raw-memories-hybrid-quantized") {
+            let database = try RawSQLiteMemoryDatabase(path: BenchmarkFixtures.databasePath("raw-memories-hybrid-quantized"))
+            try database.populate(
+                count: MemoryBenchmarkFixtures.corpus,
+                content: MemoryBenchmarkFixtures.content,
+                embedding: { MemoryBenchmarkFixtures.blobs[$0] }
+            )
+            try database.buildInt8Index(count: MemoryBenchmarkFixtures.corpus, code: { MemoryBenchmarkFixtures.codes[$0] })
+            return database
+        }
+        let query = fixtures.query
+        let queryCode = fixtures.queryCode
+        benchmark.startMeasurement()
+        for _ in benchmark.scaledIterations {
+            try blackHole(database.hybridSearchQuantized(
+                matching: "swift",
+                queryCode: queryCode,
+                near: query,
+                limit: 20,
+                overfetch: 10
+            ).count)
         }
         benchmark.stopMeasurement()
     }

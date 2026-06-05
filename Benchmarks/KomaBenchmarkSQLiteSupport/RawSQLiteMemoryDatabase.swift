@@ -52,8 +52,11 @@ public final class RawSQLiteMemoryDatabase: @unchecked Sendable {
                 sqlite3_bind_text(statement, 1, "\(index)", -1, rawMemoryTransient)
                 sqlite3_bind_text(statement, 2, content(index), -1, rawMemoryTransient)
                 let blob = embedding(index)
-                blob.withUnsafeBytes { raw in
+                let bindBlob = blob.withUnsafeBytes { raw in
                     sqlite3_bind_blob(statement, 3, raw.baseAddress, Int32(raw.count), rawMemoryTransient)
+                }
+                guard bindBlob == SQLITE_OK else {
+                    throw RawSQLiteMemoryError.executionFailed(errorMessage)
                 }
                 guard sqlite3_step(statement) == SQLITE_DONE else {
                     throw RawSQLiteMemoryError.executionFailed(errorMessage)
@@ -157,6 +160,37 @@ public final class RawSQLiteMemoryDatabase: @unchecked Sendable {
         return Array(fused.prefix(limit))
     }
 
+    /// Hybrid over the same quantized pre-filter + exact rerank path used by `nearestQuantized`.
+    public func hybridSearchQuantized(
+        matching query: String,
+        queryCode: Data,
+        near vector: [Double],
+        limit: Int,
+        candidateLimit: Int = 50,
+        overfetch: Int = 10
+    ) throws -> [RawMemoryRow] {
+        let keyword = try fullTextSearch(query, limit: candidateLimit)
+        let semantic = try nearestQuantized(
+            queryCode: queryCode,
+            query: vector,
+            limit: candidateLimit,
+            overfetch: overfetch
+        ).map(\.row)
+
+        var scores: [String: Double] = [:]
+        var firstSeen: [String: RawMemoryRow] = [:]
+        for ranking in [keyword, semantic] {
+            for (offset, row) in ranking.enumerated() {
+                scores[row.id, default: 0] += 1.0 / Double(60 + offset + 1)
+                if firstSeen[row.id] == nil {
+                    firstSeen[row.id] = row
+                }
+            }
+        }
+        let fused = scores.sorted { $0.value > $1.value }.compactMap { firstSeen[$0.key] }
+        return Array(fused.prefix(limit))
+    }
+
     /// Builds an int8 sidecar table holding one quantized code per row, keyed by the main table's
     /// rowid (rows are inserted 0..<count, so rowid == index + 1). The compact codes are what the
     /// quantized scan reads — 1 byte/dim vs 8 for the Float64 embedding.
@@ -169,8 +203,11 @@ public final class RawSQLiteMemoryDatabase: @unchecked Sendable {
         do {
             for index in 0 ..< count {
                 sqlite3_bind_int64(statement, 1, Int64(index + 1))
-                code(index).withUnsafeBytes { raw in
+                let bindCode = code(index).withUnsafeBytes { raw in
                     sqlite3_bind_blob(statement, 2, raw.baseAddress, Int32(raw.count), rawMemoryTransient)
+                }
+                guard bindCode == SQLITE_OK else {
+                    throw RawSQLiteMemoryError.executionFailed(errorMessage)
                 }
                 guard sqlite3_step(statement) == SQLITE_DONE else {
                     throw RawSQLiteMemoryError.executionFailed(errorMessage)

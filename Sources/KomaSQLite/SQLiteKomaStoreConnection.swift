@@ -70,4 +70,17 @@ extension SQLiteKomaStore {
         }
         sql.append("\"")
     }
+
+    static func stringLiteral(_ value: String) -> String {
+        var sql = "'"
+        for character in value {
+            if character == "'" {
+                sql.append("''")
+            } else {
+                sql.append(character)
+            }
+        }
+        sql.append("'")
+        return sql
+    }
 }

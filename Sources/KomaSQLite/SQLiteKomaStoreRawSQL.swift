@@ -4,7 +4,46 @@ import Koma
 
 public extension SQLiteKomaStore {
     /// Runs an arbitrary `SELECT` with positional (`?`) arguments and returns the result rows.
-    func rawQuery(_ sql: String, arguments: [KomaSQLiteStorageValue] = []) throws -> [KomaRawRow] {
+    func rawQuery(_ sql: String, arguments: [KomaSQLiteStorageValue] = []) async throws -> [KomaRawRow] {
+        await waitForTransactionAccess()
+        return try rawRows(sql, arguments: arguments)
+    }
+
+    /// Runs an arbitrary `SELECT` and decodes each row into `Record`.
+    ///
+    /// The selected columns must be in the record's declared column order (its `komaColumns`);
+    /// `SELECT <explicit columns>` or `SELECT t.*` from the record's own table both satisfy this.
+    func rawQuery<Record: KomaSQLiteFastPathRecord>(
+        _ type: Record.Type,
+        _ sql: String,
+        arguments: [KomaSQLiteStorageValue] = []
+    ) async throws -> [Record] {
+        await waitForTransactionAccess()
+        return try rawRecords(type, sql, arguments: arguments)
+    }
+
+    /// Runs a non-`SELECT` statement (INSERT/UPDATE/DELETE, FTS commands, ...) with positional
+    /// (`?`) arguments and returns the number of rows changed.
+    ///
+    /// Pass `invalidating` when the statement mutates tables observed by Koma live queries. Koma
+    /// intentionally does not parse arbitrary SQL to infer affected tables.
+    @discardableResult
+    func rawExecute(
+        _ sql: String,
+        arguments: [KomaSQLiteStorageValue] = [],
+        invalidating tables: Set<String> = []
+    ) async throws -> Int {
+        await waitForTransactionAccess()
+        let changes = try rawExecuteUnchecked(sql, arguments: arguments)
+        if !tables.isEmpty {
+            recordChangedTables(tables)
+        }
+        return changes
+    }
+}
+
+extension SQLiteKomaStore {
+    func rawRows(_ sql: String, arguments: [KomaSQLiteStorageValue] = []) throws -> [KomaRawRow] {
         try withStatement(sql) { statement in
             try Self.bind(arguments, to: statement)
             let columnCount = Int(sqlite3_column_count(statement))
@@ -31,11 +70,7 @@ public extension SQLiteKomaStore {
         }
     }
 
-    /// Runs an arbitrary `SELECT` and decodes each row into `Record`.
-    ///
-    /// The selected columns must be in the record's declared column order (its `komaColumns`);
-    /// `SELECT <explicit columns>` or `SELECT t.*` from the record's own table both satisfy this.
-    func rawQuery<Record: KomaSQLiteFastPathRecord>(
+    func rawRecords<Record: KomaSQLiteFastPathRecord>(
         _ type: Record.Type,
         _ sql: String,
         arguments: [KomaSQLiteStorageValue] = []
@@ -58,10 +93,8 @@ public extension SQLiteKomaStore {
         }
     }
 
-    /// Runs a non-`SELECT` statement (INSERT/UPDATE/DELETE, FTS commands, …) with positional
-    /// (`?`) arguments and returns the number of rows changed.
     @discardableResult
-    func rawExecute(_ sql: String, arguments: [KomaSQLiteStorageValue] = []) throws -> Int {
+    func rawExecuteUnchecked(_ sql: String, arguments: [KomaSQLiteStorageValue] = []) throws -> Int {
         try withStatement(sql) { statement in
             try Self.bind(arguments, to: statement)
             while true {
