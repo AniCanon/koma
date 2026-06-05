@@ -427,16 +427,16 @@ Apple/Darwin storage and local resources:
 
 | Operation | Koma | Raw SQLite | GRDB | Core Data |
 | --- | ---: | ---: | ---: | ---: |
-| Open + ensure schema | 0.804 ms | n/a | 0.362 ms | 1.274 ms |
-| Upsert or insert 1k records | 1.577 ms | 1.787 ms | 7.836 ms | 7.062 ms |
-| Steady upsert 1k | 1.572 ms | n/a | n/a | n/a |
-| Observed upsert 1k + refetch | 1.608 ms | n/a | n/a | n/a |
-| Fused JSON upsert 1k | 1.694 ms | n/a | n/a | n/a |
-| Filtered fetch 10k, limit 100 | 0.289 ms | 0.277 ms | 0.337 ms | 0.524 ms |
-| Inner join filter 10k, limit 100 | 4.805 ms | 4.641 ms | n/a | n/a |
-| Right join matched 10k, limit 100 | 4.706 ms | 4.887 ms | n/a | n/a |
-| Left join missing 10k, limit 100 | 7.569 ms | 7.328 ms | n/a | n/a |
-| Resource local-only fetch 10k, limit 100 | 0.298 ms | n/a | n/a | n/a |
+| Open + ensure schema | 0.866 ms | n/a | 0.344 ms | 1.255 ms |
+| Upsert or insert 1k records | 1.532 ms | 1.789 ms | 7.938 ms | 6.996 ms |
+| Steady upsert 1k | 1.546 ms | n/a | n/a | n/a |
+| Observed upsert 1k + refetch | 1.707 ms | n/a | n/a | n/a |
+| Fused JSON upsert 1k | 1.693 ms | n/a | n/a | n/a |
+| Filtered fetch 10k, limit 100 | 0.284 ms | 0.283 ms | 0.344 ms | 0.537 ms |
+| Inner join filter 10k, limit 100 | 4.461 ms | 4.641 ms | n/a | n/a |
+| Right join matched 10k, limit 100 | 5.030 ms | 4.530 ms | n/a | n/a |
+| Left join missing 10k, limit 100 | 7.053 ms | 8.057 ms | n/a | n/a |
+| Resource local-only fetch 10k, limit 100 | 0.299 ms | n/a | n/a | n/a |
 
 Android emulator storage:
 
@@ -451,10 +451,10 @@ JSON and request pipeline:
 
 | Platform | Operation | Koma | Foundation | YYJSON | Other |
 | --- | --- | ---: | ---: | ---: | ---: |
-| Apple/Darwin | Decode 1k records | 0.181 ms | 1.369 ms | 0.518 ms | n/a |
-| Apple/Darwin | Encode 1k records | 0.324 ms | 1.116 ms | 0.408 ms | n/a |
-| Apple/Darwin | Mock GET + decode 1k | 0.267 ms | URLSession + `JSONDecoder` 1.408 ms | n/a | Alamofire 1.500 ms, Moya 1.517 ms, Apollo 40.206 ms |
-| Apple/Darwin | Resource `networkFirstFallback` 1k | 2.286 ms | n/a | n/a | URLSession resource 2.462 ms |
+| Apple/Darwin | Decode 1k records | 0.180 ms | 1.351 ms | 0.530 ms | n/a |
+| Apple/Darwin | Encode 1k records | 0.348 ms | 1.115 ms | 0.425 ms | n/a |
+| Apple/Darwin | Mock GET + decode 1k | 0.270 ms | URLSession + `JSONDecoder` 1.421 ms | n/a | Alamofire 1.516 ms, Moya 1.529 ms, Apollo 39.322 ms |
+| Apple/Darwin | Resource `networkFirstFallback` 1k | 2.210 ms | n/a | n/a | URLSession resource 2.570 ms |
 | Android emulator | Decode 1k records | 0.420 ms | 1.640 ms | 0.949 ms | n/a |
 | Android emulator | Encode 1k records | 0.591 ms | 1.378 ms | 0.739 ms | n/a |
 
@@ -462,9 +462,9 @@ Local search and memory-store validation:
 
 | Operation | Koma exact | Koma quantized | Raw SQLite | Raw quantized | GRDB |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| FTS5 keyword search 10k | 0.413 ms | n/a | 0.462 ms | n/a | 0.437 ms |
-| Vector nearest 10k x 384 | 7.221 ms | 2.400 ms | 7.127 ms | 2.454 ms | 9.626 ms |
-| Hybrid keyword + vector 10k x 384 | 8.495 ms | 3.633 ms | 8.454 ms | 3.451 ms | 10.338 ms |
+| FTS5 keyword search 10k | 0.414 ms | n/a | 0.476 ms | n/a | 0.438 ms |
+| Vector nearest 10k x 384 | 7.389 ms | 2.384 ms | 7.729 ms | 2.460 ms | 8.774 ms |
+| Hybrid keyword + vector 10k x 384 | 7.950 ms | 3.355 ms | 8.634 ms | 3.625 ms | 9.650 ms |
 
 Full methodology and historical runs live in [Benchmark Results](docs/benchmarks/results.md). Each publishable run should include raw output plus metadata for the Koma revision, Swift toolchain, platform, and command.
 
