@@ -4,12 +4,13 @@ Koma was created by AniCanon to make offline read-first app data practical acros
 
 AniCanon needs project, character, asset, and production data to remain useful when the device is offline or the app is waking in the background. At the same time, turning every backend endpoint into a full sync endpoint too early creates a heavy contract: cursors, conflict resolution, outbox writes, auth renewal, tenant scoping, tombstones, and server-side merge behavior all have to be correct.
 
-Koma starts with a narrower promise: use the REST requests the app already has, persist their typed records locally, and let the app re-run important requests when the platform gives it time.
+Koma starts with a narrower promise: provide a small typed SQLite ORM that stays close to raw SQLite performance, use the REST requests the app already has, persist their typed records locally, and let the app re-run important requests when the platform gives it time.
 
 ## What Koma Optimizes For
 
 - Offline reads should be the default experience.
 - App code should query typed local data, not raw response payloads.
+- Storage should be ergonomic without pretending to replace hand-written SQLite for every workload.
 - REST refresh should normalize into records before the app reads.
 - Parameterized requests such as `projects/123` should be refreshable without whole-database sync.
 - Auth and platform scheduling should stay in the host app, where product policy belongs.
@@ -17,7 +18,7 @@ Koma starts with a narrower promise: use the REST requests the app already has, 
 
 ## What Koma Avoids
 
-Koma does not store opaque REST payload blobs as the main persistence model. It does not pretend to solve backend sync without a backend contract. It does not hide auth tokens in a scheduler. It does not require app features to depend directly on storage internals.
+Koma does not store opaque REST payload blobs as the main persistence model. It does not pretend to solve backend sync without a backend contract. It does not hide auth tokens in a scheduler. It does not require app features to depend directly on storage internals. It also does not claim to beat raw SQLite everywhere; raw SQL remains the lower-bound baseline and an intentional escape hatch.
 
 Outbox writes, conflict resolution, cursor sync, and merge policies are intentionally deferred. They belong on top of a clear server contract, not inside a generic local cache.
 

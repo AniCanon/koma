@@ -4,7 +4,7 @@
 
 # Koma
 
-Koma is a Swift 6.3 offline storage and refresh engine created by AniCanon for iOS and Android Swift. It provides typed SQLite persistence, lazy local queries, REST-backed refresh, auth plugins, retry plugins, and macro-expanded enum resource clients.
+Koma is a small Swift 6.3 SQLite ORM and offline refresh layer created by AniCanon for iOS and Android Swift. It keeps app code typed and repository-friendly while staying close to raw SQLite performance for local storage, search, and refresh workloads.
 
 Koma stores normalized records, not opaque REST payload blobs. The first goal is offline read-first data access; outbox writes, cursor sync, conflict resolution, and backend-specific sync protocols are intentionally deferred.
 
@@ -12,9 +12,9 @@ You can use Koma in storage-only mode as a typed SQLite ORM. The network/resourc
 
 ## What Koma Is
 
-Koma is a local-first data engine for Swift apps that need the same storage code on iOS and Android Swift. It gives you a typed SQLite ORM, macro-generated records and REST resources, relationship-aware queries, migrations, request refresh policies, auth plugins, retry plugins, and testable dependency injection.
+Koma is a local-first data layer for Swift apps that need the same storage code on iOS and Android Swift. It gives you a compact typed SQLite ORM, macro-generated records and REST resources, relationship-aware queries, migrations, request refresh policies, auth plugins, retry plugins, and testable dependency injection.
 
-Koma is not a backend, a global object graph, or a whole-database sync product. It does not try to replace Firebase or CloudKit. Instead, it turns the REST requests your app already owns into normalized local records, so screens can read from cache first and refresh when the app or platform scheduler asks them to.
+Koma is not a backend, a global object graph, a whole-database sync product, or a replacement for raw SQLite in every possible workload. Instead, it gives application repositories a small ORM that is close to raw SQLite on measured paths, plus escape hatches for custom SQL when an app needs them.
 
 ## Why Koma
 
@@ -23,6 +23,8 @@ AniCanon needed reliable offline data without forcing every backend endpoint to 
 Koma takes a smaller, practical stance: model the REST requests the app already makes, persist their typed records locally, and let the app keep important parameterized requests fresh. It gives repositories a stable local-first data layer while leaving true sync protocols to the moment the backend contract is ready.
 
 Architecturally, Koma is not Active Record. Records are value types that describe storage shape and mapping. They do not save themselves, fetch relationships by hidden globals, or own network calls. Persistence lives behind `KomaStore`, request refresh lives behind generated resource clients, and app features should still depend on repository or service protocols.
+
+The performance goal is not to beat hand-written SQLite in every microbenchmark. The goal is to make the common app-facing API small and typed while staying close enough to raw SQLite that teams do not have to choose between ergonomics and local performance.
 
 ## Packages
 
@@ -419,7 +421,7 @@ scripts/benchmark-android.sh .benchmark-results/local-android
 
 Benchmark dependencies are opt-in. The package only resolves Alamofire, Moya, Apollo, GRDB, and `swift-benchmark` when `KOMA_ENABLE_BENCHMARKS=1`; normal app consumers do not download them. SwiftData benchmarks are additionally opt-in for Xcode toolchains because the SwiftData model macro is not available in the open-source CLI toolchain by default.
 
-Lower is better. The fresh Apple/Darwin tables below are p50 wall-clock clean-branch numbers captured on June 5, 2026 with Apple Swift 6.3 on Darwin 25.5.0 arm64. Artifact: `.benchmark-results/feat-sqlite-raw-sql-clean-20260605`. Android emulator numbers remain the May 24, 2026 smoke baseline.
+Lower is better. Read the storage and search tables as a closeness-to-raw check, not as a claim that Koma replaces hand-written SQLite everywhere. The fresh Apple/Darwin tables below are p50 wall-clock clean-branch numbers captured on June 5, 2026 with Apple Swift 6.3 on Darwin 25.5.0 arm64. Artifact: `.benchmark-results/feat-sqlite-raw-sql-clean-20260605`. Android emulator numbers remain the May 24, 2026 smoke baseline.
 
 Apple/Darwin storage and local resources:
 

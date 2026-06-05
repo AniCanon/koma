@@ -23,6 +23,7 @@ DocC is still used for generated Swift API reference, but the broader handbook l
 
 - [Querying](guides/querying.md)
 - [Storage-Only Mode](guides/storage-only.md)
+- [Raw SQL and Local Search](guides/raw-sql-and-local-search.md)
 - [REST Resources](guides/rest-resources.md)
 - [Scheduled Refresh](guides/scheduled-refresh.md)
 - [Migrations](guides/migrations.md)

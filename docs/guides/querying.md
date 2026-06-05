@@ -81,3 +81,5 @@ try await store.delete(ProjectRecord.self)
     .where { $0.deletedAt != nil }
     .execute()
 ```
+
+For query shapes beyond the typed builder, see [Raw SQL and Local Search](raw-sql-and-local-search.md). That guide covers `rawQuery`, `rawExecute`, FTS5, exact vector search, quantized vector search, and hybrid search.

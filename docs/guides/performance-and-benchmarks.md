@@ -2,7 +2,7 @@
 
 Koma benchmarks compare the public API against lower-level storage baselines.
 
-Koma is designed to keep app code high level while moving the repetitive work into generated or storage-specific fast paths.
+Koma is designed to keep app code high level while moving repetitive work into generated or storage-specific fast paths. The selling point is a small ORM close to raw SQLite performance, not a claim that the ORM replaces hand-written SQL in every workload.
 
 ## Why Koma Is Fast
 
@@ -19,7 +19,7 @@ Koma is designed to keep app code high level while moving the repetitive work in
 - Quantized vector search uses a trigger-maintained int8 sidecar as a fast pre-filter, then reranks over-fetched candidates with full-precision cosine.
 - The HTTP layer stays close to `URLSession`; plugins compose auth, retry, and logging without hiding the transport.
 
-Raw SQLite can still win some narrow microbenchmarks because it has no framework abstraction. Koma's target is to stay close to raw SQLite while preserving a typed, testable API.
+Raw SQLite can still win some narrow microbenchmarks because it has no framework abstraction. Koma's target is to stay close to raw SQLite while preserving a typed, testable API and explicit raw SQL escape hatches.
 
 ```sh
 scripts/benchmark.sh
@@ -42,7 +42,7 @@ Use benchmark results to decide where to optimize internals without changing the
 
 ## Reading Results
 
-Use raw SQLite as the lower-bound storage baseline. Use GRDB as the mature Swift SQLite peer. Treat Core Data and SwiftData as Apple-only comparisons, not Android Swift peers.
+Use raw SQLite as the lower-bound storage baseline and read Koma results as closeness-to-raw evidence. Use GRDB as the mature Swift SQLite peer. Treat Core Data and SwiftData as Apple-only comparisons, not Android Swift peers.
 
 For networking, compare transport-only numbers against `URLSession` and full decode paths against URLSession, Alamofire, Moya, and Apollo where each tool's model applies. Koma should be transparent when it is measuring REST and when Apollo is measuring a GraphQL client stack.
 

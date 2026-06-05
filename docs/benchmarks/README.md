@@ -32,7 +32,7 @@ Koma treats benchmark results as versioned release artifacts. A published result
 - `grdb.sqlite.fullTextSearch.10k`, `grdb.sqlite.nearest.10k.dim384`, and `grdb.sqlite.hybridSearch.10k.dim384`: GRDB peer baselines for the same search workloads.
 - `koma.vector.cosineScan.10k.dim384`, `koma.vector.encode.1k.dim384`, `koma.vector.decode.1k.dim384`, and `koma.fusion.rrf.2x1k`: in-memory vector and ranking-fusion primitives used to interpret the store-level search numbers.
 
-The raw SQLite benchmarks are the primary baseline because they are portable across iOS, Android Swift, macOS, and Linux. GRDB is the mature Swift SQLite peer baseline. SwiftData and Core Data are Apple-only comparison suites, so they should not be presented as Android peers. Core Data uses its optimized batch insert API; SwiftData currently uses model insertion because it does not expose an equivalent public batch insert API.
+The raw SQLite benchmarks are the primary baseline because they are portable across iOS, Android Swift, macOS, and Linux. They should be read as the lower-bound target Koma tries to stay close to, not as a baseline Koma must beat in every case. GRDB is the mature Swift SQLite peer baseline. SwiftData and Core Data are Apple-only comparison suites, so they should not be presented as Android peers. Core Data uses its optimized batch insert API; SwiftData currently uses model insertion because it does not expose an equivalent public batch insert API.
 
 ## Running Locally
 

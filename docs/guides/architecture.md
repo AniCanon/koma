@@ -1,8 +1,8 @@
 # Architecture
 
-Koma is a repository-friendly data mapper and request refresh layer. It is not Active Record, not a Firebase-style whole-database sync engine, and not just a REST client.
+Koma is a small repository-friendly SQLite ORM, data mapper, and request refresh layer. It is not Active Record, not a Firebase-style whole-database sync engine, and not just a REST client.
 
-The public API should feel high level, but the runtime stays close to typed records, HTTP requests, and SQLite statements.
+The public API should feel high level, but the runtime stays close to typed records, HTTP requests, and SQLite statements. The performance goal is to stay close to raw SQLite on common app workloads, not to replace hand-written SQL in every corner case.
 
 The SQLite ORM is usable on its own. The resource and HTTP layers are additive.
 
