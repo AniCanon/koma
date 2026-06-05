@@ -17,6 +17,7 @@ Captured June 5, 2026 from the `feat/sqlite-raw-sql` working tree after adding r
 - Platform: Darwin 25.5.0 arm64
 - Swift: Apple Swift 6.3
 - Artifact: `.benchmark-results/feat-sqlite-raw-sql-clean-20260605`
+- Git revision: `969a9b9133a665f883f48453efeb8e27ce4778a7`
 - Git dirty: false
 
 Lower is better.
@@ -25,95 +26,95 @@ Lower is better.
 
 | Benchmark | p50 wall clock | p90 wall clock | Samples |
 | --- | ---: | ---: | ---: |
-| `koma.sqlite.open.ensureSchema` | 0.834 ms | 1.005 ms | 1141 |
-| `grdb.sqlite.open.ensureSchema` | 0.360 ms | 0.466 ms | 2571 |
-| `coredata.sqlite.open.ensureSchema` | 1.258 ms | 1.508 ms | 760 |
-| `koma.sqlite.batchUpsert.1k` | 1.589 ms | 1.778 ms | 610 |
-| `koma.sqlite.steadyUpsert.1k` | 1.671 ms | 1.871 ms | 579 |
-| `koma.sqlite.observedUpsert.1k.limit100` | 1.765 ms | 2.214 ms | 531 |
-| `koma.sqlite.fusedJSONUpsert.1k` | 1.737 ms | 1.875 ms | 562 |
-| `koma.sqlite.fusedJSONSteadyUpsert.1k` | 1.747 ms | 1.924 ms | 555 |
-| `rawsqlite.batchUpsert.1k` | 1.834 ms | 2.078 ms | 527 |
-| `grdb.sqlite.batchUpsert.1k` | 7.737 ms | 8.462 ms | 125 |
-| `coredata.sqlite.batchInsert.1k` | 7.655 ms | 9.462 ms | 126 |
-| `koma.sqlite.filteredOrderedFetch.10k.limit100` | 0.289 ms | 0.304 ms | 3325 |
-| `rawsqlite.filteredOrderedFetch.10k.limit100` | 0.283 ms | 0.312 ms | 3285 |
-| `grdb.sqlite.filteredOrderedFetch.10k.limit100` | 0.355 ms | 0.574 ms | 2289 |
-| `coredata.sqlite.filteredOrderedFetch.10k.limit100` | 0.535 ms | 0.567 ms | 1778 |
-| `koma.sqlite.innerJoinFilter.10k.limit100` | 4.874 ms | 5.259 ms | 200 |
-| `rawsqlite.innerJoinFilter.10k.limit100` | 4.813 ms | 5.091 ms | 204 |
-| `koma.sqlite.rightJoinMatched.10k.limit100` | 4.993 ms | 5.206 ms | 199 |
-| `rawsqlite.rightJoinMatched.10k.limit100` | 5.009 ms | 5.951 ms | 192 |
-| `koma.sqlite.leftJoinMissing.10k.limit100` | 7.684 ms | 8.561 ms | 127 |
-| `rawsqlite.leftJoinMissing.10k.limit100` | 7.766 ms | 8.086 ms | 129 |
-| `koma.resource.localOnly.10k.limit100` | 0.299 ms | 0.315 ms | 3193 |
-| `koma.resource.networkFirstFallback.1k` | 2.310 ms | 2.454 ms | 421 |
+| `koma.sqlite.open.ensureSchema` | 0.804 ms | 1.013 ms | 1169 |
+| `grdb.sqlite.open.ensureSchema` | 0.362 ms | 0.441 ms | 2573 |
+| `coredata.sqlite.open.ensureSchema` | 1.274 ms | 1.415 ms | 772 |
+| `koma.sqlite.batchUpsert.1k` | 1.577 ms | 1.672 ms | 624 |
+| `koma.sqlite.steadyUpsert.1k` | 1.572 ms | 1.690 ms | 622 |
+| `koma.sqlite.observedUpsert.1k.limit100` | 1.608 ms | 1.731 ms | 612 |
+| `koma.sqlite.fusedJSONUpsert.1k` | 1.694 ms | 1.786 ms | 579 |
+| `koma.sqlite.fusedJSONSteadyUpsert.1k` | 1.683 ms | 1.780 ms | 583 |
+| `rawsqlite.batchUpsert.1k` | 1.787 ms | 1.881 ms | 555 |
+| `grdb.sqlite.batchUpsert.1k` | 7.836 ms | 8.065 ms | 128 |
+| `coredata.sqlite.batchInsert.1k` | 7.062 ms | 7.303 ms | 140 |
+| `koma.sqlite.filteredOrderedFetch.10k.limit100` | 0.289 ms | 0.307 ms | 3317 |
+| `rawsqlite.filteredOrderedFetch.10k.limit100` | 0.277 ms | 0.295 ms | 3452 |
+| `grdb.sqlite.filteredOrderedFetch.10k.limit100` | 0.337 ms | 0.357 ms | 2860 |
+| `coredata.sqlite.filteredOrderedFetch.10k.limit100` | 0.524 ms | 0.556 ms | 1845 |
+| `koma.sqlite.innerJoinFilter.10k.limit100` | 4.805 ms | 5.181 ms | 206 |
+| `rawsqlite.innerJoinFilter.10k.limit100` | 4.641 ms | 4.964 ms | 212 |
+| `koma.sqlite.rightJoinMatched.10k.limit100` | 4.706 ms | 4.829 ms | 212 |
+| `rawsqlite.rightJoinMatched.10k.limit100` | 4.887 ms | 5.333 ms | 202 |
+| `koma.sqlite.leftJoinMissing.10k.limit100` | 7.569 ms | 7.684 ms | 132 |
+| `rawsqlite.leftJoinMissing.10k.limit100` | 7.328 ms | 7.471 ms | 137 |
+| `koma.resource.localOnly.10k.limit100` | 0.298 ms | 0.315 ms | 3218 |
+| `koma.resource.networkFirstFallback.1k` | 2.286 ms | 2.503 ms | 425 |
 
 ### Search and Vector
 
 | Benchmark | p50 wall clock | p90 wall clock | Samples |
 | --- | ---: | ---: | ---: |
-| `koma.sqlite.fullTextSearch.10k` | 0.419 ms | 0.441 ms | 2323 |
-| `rawsqlite.fullTextSearch.10k` | 0.471 ms | 0.500 ms | 2032 |
-| `grdb.sqlite.fullTextSearch.10k` | 0.455 ms | 0.511 ms | 2056 |
-| `koma.sqlite.nearest.10k.dim384` | 7.512 ms | 8.036 ms | 130 |
-| `rawsqlite.nearest.10k.dim384` | 7.418 ms | 7.569 ms | 134 |
-| `grdb.sqlite.nearest.10k.dim384` | 9.454 ms | 10.027 ms | 104 |
-| `koma.sqlite.nearestQuantized.10k.dim384` | 2.458 ms | 3.023 ms | 384 |
-| `rawsqlite.nearestQuantized.10k.dim384` | 2.937 ms | 3.723 ms | 319 |
-| `koma.sqlite.hybridSearch.10k.dim384` | 8.364 ms | 8.970 ms | 118 |
-| `rawsqlite.hybridSearch.10k.dim384` | 8.118 ms | 8.303 ms | 123 |
-| `grdb.sqlite.hybridSearch.10k.dim384` | 11.092 ms | 12.100 ms | 89 |
-| `koma.sqlite.hybridSearchQuantized.10k.dim384` | 3.574 ms | 3.740 ms | 279 |
-| `rawsqlite.hybridSearchQuantized.10k.dim384` | 3.760 ms | 3.961 ms | 263 |
-| `koma.vector.cosineScan.10k.dim384` | 2.019 ms | 2.335 ms | 479 |
-| `koma.vector.encode.1k.dim384` | 0.083 ms | 0.088 ms | 10000 |
-| `koma.vector.decode.1k.dim384` | 0.063 ms | 0.068 ms | 10000 |
-| `koma.fusion.rrf.2x1k` | 4.497 ms | 4.858 ms | 218 |
+| `koma.sqlite.fullTextSearch.10k` | 0.413 ms | 0.435 ms | 2353 |
+| `rawsqlite.fullTextSearch.10k` | 0.462 ms | 0.489 ms | 2096 |
+| `grdb.sqlite.fullTextSearch.10k` | 0.437 ms | 0.462 ms | 2222 |
+| `koma.sqlite.nearest.10k.dim384` | 7.221 ms | 7.500 ms | 137 |
+| `rawsqlite.nearest.10k.dim384` | 7.127 ms | 7.274 ms | 140 |
+| `grdb.sqlite.nearest.10k.dim384` | 9.626 ms | 9.765 ms | 104 |
+| `koma.sqlite.nearestQuantized.10k.dim384` | 2.400 ms | 2.521 ms | 414 |
+| `rawsqlite.nearestQuantized.10k.dim384` | 2.454 ms | 2.531 ms | 403 |
+| `koma.sqlite.hybridSearch.10k.dim384` | 8.495 ms | 8.626 ms | 118 |
+| `rawsqlite.hybridSearch.10k.dim384` | 8.454 ms | 8.954 ms | 117 |
+| `grdb.sqlite.hybridSearch.10k.dim384` | 10.338 ms | 10.543 ms | 97 |
+| `koma.sqlite.hybridSearchQuantized.10k.dim384` | 3.633 ms | 3.805 ms | 274 |
+| `rawsqlite.hybridSearchQuantized.10k.dim384` | 3.451 ms | 3.705 ms | 284 |
+| `koma.vector.cosineScan.10k.dim384` | 1.962 ms | 2.008 ms | 509 |
+| `koma.vector.encode.1k.dim384` | 0.083 ms | 0.089 ms | 10000 |
+| `koma.vector.decode.1k.dim384` | 0.062 ms | 0.067 ms | 10000 |
+| `koma.fusion.rrf.2x1k` | 4.518 ms | 4.600 ms | 221 |
 
 ### JSON Codecs
 
 | Benchmark | p50 wall clock | p90 wall clock | Samples |
 | --- | ---: | ---: | ---: |
 | `network.koma.json.records.decode.10` | 0.002 ms | 0.002 ms | 10000 |
-| `network.foundation.jsondecoder.decode.10` | 0.015 ms | 0.015 ms | 10000 |
+| `network.foundation.jsondecoder.decode.10` | 0.015 ms | 0.016 ms | 10000 |
 | `network.yyjson.decoder.decode.10` | 0.006 ms | 0.006 ms | 10000 |
-| `network.koma.json.records.decode.1k` | 0.184 ms | 0.195 ms | 5372 |
-| `network.foundation.jsondecoder.decode.1k` | 1.328 ms | 1.376 ms | 752 |
-| `network.yyjson.decoder.decode.1k` | 0.525 ms | 0.553 ms | 1875 |
-| `network.koma.json.records.decode.10k` | 1.905 ms | 1.956 ms | 526 |
-| `network.foundation.jsondecoder.decode.10k` | 13.427 ms | 13.648 ms | 74 |
-| `network.yyjson.decoder.decode.10k` | 5.472 ms | 5.722 ms | 181 |
-| `network.koma.json.records.encode.10` | 0.003 ms | 0.003 ms | 10000 |
-| `network.foundation.jsonencoder.encode.10` | 0.012 ms | 0.012 ms | 10000 |
-| `network.yyjson.encoder.encode.10` | 0.005 ms | 0.006 ms | 10000 |
-| `network.koma.json.records.encode.1k` | 0.331 ms | 0.351 ms | 2970 |
-| `network.foundation.jsonencoder.encode.1k` | 1.121 ms | 1.168 ms | 890 |
-| `network.yyjson.encoder.encode.1k` | 0.439 ms | 0.468 ms | 2249 |
-| `network.koma.json.records.encode.10k` | 3.797 ms | 4.268 ms | 256 |
-| `network.foundation.jsonencoder.encode.10k` | 11.330 ms | 11.526 ms | 88 |
-| `network.yyjson.encoder.encode.10k` | 4.100 ms | 4.383 ms | 241 |
+| `network.koma.json.records.decode.1k` | 0.181 ms | 0.192 ms | 5465 |
+| `network.foundation.jsondecoder.decode.1k` | 1.369 ms | 1.439 ms | 724 |
+| `network.yyjson.decoder.decode.1k` | 0.518 ms | 0.546 ms | 1918 |
+| `network.koma.json.records.decode.10k` | 1.805 ms | 1.853 ms | 554 |
+| `network.foundation.jsondecoder.decode.10k` | 13.926 ms | 14.680 ms | 72 |
+| `network.yyjson.decoder.decode.10k` | 5.239 ms | 5.341 ms | 191 |
+| `network.koma.json.records.encode.10` | 0.004 ms | 0.004 ms | 10000 |
+| `network.foundation.jsonencoder.encode.10` | 0.012 ms | 0.013 ms | 10000 |
+| `network.yyjson.encoder.encode.10` | 0.004 ms | 0.005 ms | 10000 |
+| `network.koma.json.records.encode.1k` | 0.324 ms | 0.344 ms | 3055 |
+| `network.foundation.jsonencoder.encode.1k` | 1.116 ms | 1.165 ms | 895 |
+| `network.yyjson.encoder.encode.1k` | 0.408 ms | 0.431 ms | 2431 |
+| `network.koma.json.records.encode.10k` | 3.377 ms | 3.551 ms | 294 |
+| `network.foundation.jsonencoder.encode.10k` | 11.158 ms | 11.362 ms | 90 |
+| `network.yyjson.encoder.encode.10k` | 4.063 ms | 4.168 ms | 246 |
 
 ### Transport and Request Pipeline
 
 | Benchmark | p50 wall clock | p90 wall clock | Samples |
 | --- | ---: | ---: | ---: |
-| `network.koma.transport.get.data.1k` | 0.077 ms | 0.085 ms | 10000 |
-| `network.urlsession.get.data.10` | 0.070 ms | 0.078 ms | 10000 |
-| `network.urlsession.get.data.1k` | 0.072 ms | 0.080 ms | 10000 |
-| `network.urlsession.get.data.10k` | 0.097 ms | 0.107 ms | 9140 |
-| `network.koma.transport.get.jsonrecord.10` | 0.076 ms | 0.086 ms | 10000 |
-| `network.koma.transport.get.jsonrecord.1k` | 0.265 ms | 0.282 ms | 3550 |
-| `network.koma.transport.get.jsonrecord.10k` | 1.972 ms | 2.029 ms | 504 |
-| `network.koma.transport.get.decode.1k` | 1.445 ms | 1.499 ms | 686 |
-| `network.koma.transport.get.decode.headers.1k` | 1.449 ms | 1.510 ms | 682 |
-| `network.urlsession.get.decode.10` | 0.092 ms | 0.102 ms | 9546 |
-| `network.urlsession.get.decode.1k` | 1.500 ms | 1.628 ms | 647 |
-| `network.urlsession.get.decode.10k` | 13.984 ms | 14.688 ms | 71 |
-| `network.koma.resource.urlsession.networkFirstFallback.1k` | 2.570 ms | 2.730 ms | 385 |
-| `network.alamofire.get.decode.1k` | 1.508 ms | 1.561 ms | 656 |
-| `network.moya.get.decode.1k` | 1.548 ms | 1.668 ms | 628 |
-| `network.apollo.query.networkOnly.1k` | 40.370 ms | 40.960 ms | 25 |
+| `network.koma.transport.get.data.1k` | 0.077 ms | 0.086 ms | 10000 |
+| `network.urlsession.get.data.10` | 0.071 ms | 0.078 ms | 10000 |
+| `network.urlsession.get.data.1k` | 0.072 ms | 0.082 ms | 10000 |
+| `network.urlsession.get.data.10k` | 0.097 ms | 0.106 ms | 9174 |
+| `network.koma.transport.get.jsonrecord.10` | 0.077 ms | 0.088 ms | 10000 |
+| `network.koma.transport.get.jsonrecord.1k` | 0.267 ms | 0.288 ms | 3510 |
+| `network.koma.transport.get.jsonrecord.10k` | 1.930 ms | 1.998 ms | 515 |
+| `network.koma.transport.get.decode.1k` | 1.415 ms | 1.467 ms | 700 |
+| `network.koma.transport.get.decode.headers.1k` | 1.444 ms | 1.629 ms | 659 |
+| `network.urlsession.get.decode.10` | 0.095 ms | 0.123 ms | 8441 |
+| `network.urlsession.get.decode.1k` | 1.408 ms | 1.479 ms | 693 |
+| `network.urlsession.get.decode.10k` | 13.664 ms | 13.795 ms | 74 |
+| `network.koma.resource.urlsession.networkFirstFallback.1k` | 2.462 ms | 2.648 ms | 402 |
+| `network.alamofire.get.decode.1k` | 1.500 ms | 1.561 ms | 661 |
+| `network.moya.get.decode.1k` | 1.517 ms | 1.571 ms | 654 |
+| `network.apollo.query.networkOnly.1k` | 40.206 ms | 40.763 ms | 25 |
 
 ## Live Observation Branch
 
