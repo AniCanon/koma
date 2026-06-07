@@ -2,6 +2,10 @@
   <img src="assets/koma-logo.png" alt="Koma" width="420">
 </p>
 
+[![CI](https://github.com/AniCanon/koma/actions/workflows/ci.yml/badge.svg)](https://github.com/AniCanon/koma/actions/workflows/ci.yml)
+
+[![Benchmarks](https://github.com/AniCanon/koma/actions/workflows/benchmarks.yml/badge.svg)](https://github.com/AniCanon/koma/actions/workflows/benchmarks.yml)
+
 # Koma
 
 Koma is a small Swift 6.3 SQLite ORM and offline refresh layer created by AniCanon for iOS and Android Swift. It keeps app code typed and repository-friendly while staying close to raw SQLite performance for local storage, search, and refresh workloads.
