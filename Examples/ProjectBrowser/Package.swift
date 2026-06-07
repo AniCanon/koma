@@ -20,7 +20,6 @@ let package = Package(
             dependencies: [
                 .product(name: "Koma", package: "koma"),
                 .product(name: "KomaHTTP", package: "koma"),
-                .product(name: "KomaMacros", package: "koma"),
                 .product(name: "KomaSQLite", package: "koma"),
                 .product(name: "KomaTesting", package: "koma")
             ]

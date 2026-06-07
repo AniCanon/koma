@@ -1,6 +1,5 @@
 import Foundation
 import Koma
-import KomaMacros
 import Testing
 
 @KomaEntity(table: "json_projects")

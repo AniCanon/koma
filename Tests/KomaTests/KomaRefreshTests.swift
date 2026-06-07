@@ -1,6 +1,5 @@
 import Foundation
 import Koma
-import KomaMacros
 import KomaSQLite
 import KomaTesting
 import Testing

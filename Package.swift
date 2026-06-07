@@ -34,8 +34,7 @@ let benchmarkTargets: [Target] = enableBenchmarks ? [
     .target(
         name: "KomaBenchmarkSupport",
         dependencies: [
-            "Koma",
-            "KomaMacros"
+            "Koma"
         ],
         path: "Benchmarks/KomaBenchmarkSupport"
     ),
@@ -66,7 +65,6 @@ let benchmarkTargets: [Target] = enableBenchmarks ? [
             "KomaBenchmarkSupport",
             "KomaBenchmarkSQLiteSupport",
             "KomaHTTP",
-            "KomaMacros",
             "KomaSQLite",
             "KomaTesting",
             .product(name: "Alamofire", package: "Alamofire"),
@@ -141,11 +139,12 @@ let package = Package(
             ]
         ),
         .target(
-            name: "Koma"
+            name: "Koma",
+            dependencies: ["KomaMacroPlugin"]
         ),
         .target(
             name: "KomaMacros",
-            dependencies: ["Koma", "KomaMacroPlugin"]
+            dependencies: ["Koma"]
         ),
         .target(
             name: "KomaSQLite",
@@ -173,7 +172,6 @@ let package = Package(
             dependencies: [
                 "Koma",
                 "KomaHTTP",
-                "KomaMacros",
                 "KomaMacroPlugin",
                 "KomaSQLite",
                 "KomaTesting",

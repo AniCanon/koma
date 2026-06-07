@@ -10,7 +10,6 @@ Storage-only apps depend on:
 
 ```swift
 .product(name: "Koma", package: "koma"),
-.product(name: "KomaMacros", package: "koma"),
 .product(name: "KomaSQLite", package: "koma")
 ```
 
@@ -26,7 +25,6 @@ They also do not need `KomaClient`, resource enums, transports, auth plugins, re
 
 ```swift
 import Koma
-import KomaMacros
 
 @KomaEntity(table: "projects")
 struct ProjectRecord: KomaEntityRecord, Equatable {
@@ -188,10 +186,10 @@ The network layer is additive. A storage-only app can later add `KomaHTTP`, crea
 
 ```text
 Storage-only:
-    Koma + KomaMacros + KomaSQLite
+    Koma + KomaSQLite
 
 Storage plus REST refresh:
-    Koma + KomaMacros + KomaSQLite + KomaHTTP
+    Koma + KomaSQLite + KomaHTTP
 ```
 
 This modularity is intentional. Koma's SQLite ORM is useful by itself; the resource layer builds on top of the same records and store.

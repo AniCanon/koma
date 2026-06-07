@@ -1,6 +1,5 @@
 import Foundation
 import Koma
-import KomaMacros
 
 public struct BenchmarkProject: Codable, Equatable, Sendable {
     public let id: String

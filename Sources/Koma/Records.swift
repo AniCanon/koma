@@ -1,5 +1,8 @@
 import Foundation
 
+@_documentation(visibility: private)
+public typealias KomaData = Data
+
 /// A normalized value that Koma can store in a table.
 ///
 /// Prefer declaring records with `@KomaEntity`; stored properties become

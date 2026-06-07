@@ -1,6 +1,5 @@
 import Foundation
 import Koma
-import KomaMacros
 
 @KomaEntity(table: "projects", as: Project.self)
 struct ProjectRecord: KomaRemoteRecord, Equatable {
