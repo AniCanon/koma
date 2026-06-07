@@ -3,7 +3,6 @@ import Foundation
 import Koma
 import KomaBenchmarkSQLiteSupport
 import KomaBenchmarkSupport
-import KomaMacros
 import KomaSQLite
 
 /// A record with both a free-text column (FTS5) and a Float64 embedding column (vector recall),

@@ -1,5 +1,4 @@
 import Koma
-import KomaMacros
 
 @KomaResource(basePath: "projects", record: ProjectRecord.self)
 enum ProjectResources {

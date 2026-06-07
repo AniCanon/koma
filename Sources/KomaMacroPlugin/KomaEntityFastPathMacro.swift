@@ -87,7 +87,7 @@ extension KomaEntityMacro {
             public static let komaUsesJSONFastPath = true
             """,
             """
-            public static func komaJSONRecords(from data: borrowing Data) throws -> [Self] {
+            public static func komaJSONRecords(from data: borrowing KomaData) throws -> [Self] {
                 try KomaJSONRecordDecoder.decodeArray(
                     from: data,
                     estimatedBytesPerRecord: \(raw: estimatedBytesPerRecord)
@@ -97,7 +97,7 @@ extension KomaEntityMacro {
             }
             """,
             """
-            public static func komaJSONRecord(from data: borrowing Data) throws -> Self {
+            public static func komaJSONRecord(from data: borrowing KomaData) throws -> Self {
                 try KomaJSONRecordDecoder.decodeObject(from: data) { scanner in
                     try Self.komaJSONRecord(from: &scanner)
                 }
@@ -120,7 +120,7 @@ extension KomaEntityMacro {
             """,
             """
             public static func komaJSONBindRecords<Binder: KomaSQLiteJSONValueBinder>(
-                from data: borrowing Data,
+                from data: borrowing KomaData,
                 makeBinder: () throws -> Binder,
                 finish: (inout Binder) throws -> Void
             ) throws {
@@ -147,7 +147,7 @@ extension KomaEntityMacro {
             }
             """,
             """
-            public static func komaJSONData(records: borrowing [Self]) throws -> Data {
+            public static func komaJSONData(records: borrowing [Self]) throws -> KomaData {
                 try KomaJSONRecordEncoder.encodeArray(
                     records,
                     estimatedBytesPerRecord: \(raw: estimatedBytesPerRecord)
@@ -157,7 +157,7 @@ extension KomaEntityMacro {
             }
             """,
             """
-            public func komaJSONData() throws -> Data {
+            public func komaJSONData() throws -> KomaData {
                 try KomaJSONRecordEncoder.encodeObject(self) { record, writer in
                     try record.komaJSONWrite(to: &writer)
                 }

@@ -7,7 +7,7 @@ Koma has two entry points:
 
 ## Storage-Only
 
-Use `Koma`, `KomaMacros`, and `KomaSQLite` when you only need local storage.
+Use `Koma` and `KomaSQLite` when you only need local storage.
 
 ```swift
 @KomaEntity(table: "projects")

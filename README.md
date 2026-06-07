@@ -28,11 +28,11 @@ The performance goal is not to beat hand-written SQLite in every microbenchmark.
 
 ## Packages
 
-- `Koma`: runtime core, query API, resources, plugins, snapshots, and store protocols.
-- `KomaMacros`: public macro declarations for entities and resources.
+- `Koma`: macro declarations, runtime core, query API, resources, plugins, snapshots, and store protocols.
 - `KomaSQLite`: SQLite-backed `KomaStore` using the bundled SQLite amalgamation.
 - `KomaHTTP`: `URLSession` transport for REST APIs.
 - `KomaTesting`: test utilities such as fake transports.
+- `KomaMacros`: deprecated compatibility module that re-exports `Koma`.
 
 ## Documentation
 
@@ -72,7 +72,7 @@ let projects = try await store.query(ProjectRecord.self)
     .fetch()
 ```
 
-For this mode, depend on `Koma`, `KomaMacros`, and `KomaSQLite`. Add `KomaHTTP` only when you want REST-backed refresh. See [Storage-Only Mode](docs/guides/storage-only.md).
+For this mode, depend on `Koma` and `KomaSQLite`. Add `KomaHTTP` only when you want REST-backed refresh. See [Storage-Only Mode](docs/guides/storage-only.md).
 
 ## Raw SQL, FTS, and Vector Search
 
@@ -190,7 +190,6 @@ let koma = try await KomaClient.sqlite(
 
 ```swift
 import Koma
-import KomaMacros
 
 @KomaResource(basePath: "projects", record: ProjectRecord.self)
 enum ProjectResources {
@@ -298,7 +297,6 @@ Koma stores refresh intent for the concrete request, not bearer tokens or raw pa
 
 ```swift
 import Koma
-import KomaMacros
 
 @KomaEntity(table: "projects", as: Project.self)
 struct ProjectRecord: KomaRemoteRecord {
@@ -377,7 +375,6 @@ Storage-only:
 
 ```swift
 .product(name: "Koma", package: "koma"),
-.product(name: "KomaMacros", package: "koma"),
 .product(name: "KomaSQLite", package: "koma")
 ```
 
@@ -385,12 +382,11 @@ Storage plus REST refresh:
 
 ```swift
 .product(name: "Koma", package: "koma"),
-.product(name: "KomaMacros", package: "koma"),
 .product(name: "KomaSQLite", package: "koma"),
 .product(name: "KomaHTTP", package: "koma")
 ```
 
-The macro plugin is host-built. Runtime targets are designed to compile for Android Swift as well as Apple platforms.
+The macro plugin is host-built. Macro declarations are exported from `Koma`; the older `KomaMacros` product is kept as a deprecated compatibility re-export. Runtime targets are designed to compile for Android Swift as well as Apple platforms.
 
 ## Development
 

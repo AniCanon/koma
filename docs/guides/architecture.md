@@ -8,10 +8,10 @@ The SQLite ORM is usable on its own. The resource and HTTP layers are additive.
 
 ```text
 Storage-only mode:
-    Koma + KomaMacros + KomaSQLite
+    Koma + KomaSQLite
 
 Storage plus REST refresh:
-    Koma + KomaMacros + KomaSQLite + KomaHTTP
+    Koma + KomaSQLite + KomaHTTP
 ```
 
 ## Responsibility Matrix

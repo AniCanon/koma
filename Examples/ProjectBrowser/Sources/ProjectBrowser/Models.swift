@@ -1,6 +1,5 @@
 import Foundation
 import Koma
-import KomaMacros
 
 @KomaModel(record: CharacterRecord.self)
 struct CharacterModel {

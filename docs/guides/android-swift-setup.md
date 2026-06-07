@@ -1,8 +1,8 @@
 # Android Swift Setup
 
-Koma separates host-built macros from runtime targets.
+Koma exports its macro declarations from the primary module, while the macro implementation remains host-built.
 
-Use macros while building the shared package on the host. Android runtime code should depend on macro-expanded Swift interfaces and runtime targets:
+Use macros while building the shared package on the host. Android runtime code should depend on macro-expanded Swift interfaces and the runtime products it uses:
 
 - `Koma`
 - `KomaSQLite`

@@ -1,6 +1,5 @@
 import Foundation
 import Koma
-import KomaMacros
 
 struct Project: Codable, Equatable {
     let id: String
