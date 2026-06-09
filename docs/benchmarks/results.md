@@ -4,54 +4,120 @@ Koma publishes small p50 snapshots in the README and keeps fuller benchmark cont
 
 | Koma Version | Environment | Swift | Artifact | Notes |
 | --- | --- | --- | --- | --- |
-| Vector search optimization branch | Darwin 25.5.0 arm64, SwiftPM benchmark runner | Swift 6.3 release | `.benchmark-results/feature-perf-improvements-search-20260609` | Clean-branch validation for the Float32 storage precision, bounded top-k selection, and unrolled scan loops. Search and vector benchmarks only. |
+| Performance improvements branch | Darwin 25.5.0 arm64, SwiftPM benchmark runner | Swift 6.3 release | `.benchmark-results/feature-perf-improvements-full-20260609` | Full clean-branch validation: Float32 vector storage, bounded top-k, JSON encoder rewrite, call-site-specialized RRF fusion, and the GRDB WAL benchmark fix. Supersedes the same-day search-only artifact `feature-perf-improvements-search-20260609`. |
 | SQLite raw SQL branch validation | Darwin 25.5.0 arm64, SwiftPM benchmark runner | Swift 6.3 release | `.benchmark-results/feat-sqlite-raw-sql-clean-20260605` | Clean-branch validation for raw SQL, FTS5, exact vector search, quantized vector search, hybrid search, storage, JSON, and request-pipeline benchmarks. |
 | Live observation branch | Darwin 25.4.0 arm64, SwiftPM benchmark runner | Swift 6.3 release | `.benchmark-results/live-observation-final-20260525` | Final host pass for live observation, fused JSON-to-SQLite binding, generated key dispatch, and projection fast paths. Host GRDB was disabled for this run because this Swift 6.3 toolchain still fails the GRDB benchmark target in release mode. |
 | Open-source prep | Darwin 25.4.0 arm64, SwiftPM benchmark runner | Swift 6.3 release | `.benchmark-results/koma-open-source-apple-20260524` | Apple-platform baseline for the iOS-side runtime, not an on-device iOS claim. Host GRDB storage comparison was disabled for this run because this Swift 6.3 toolchain crashed while compiling the GRDB benchmark target. |
 | Open-source prep | Google sdk_gphone16k_arm64 emulator, Android 17 SDK 37 | Swift 6.3 release Android SDK | `.benchmark-results/koma-open-source-android-emulator-20260524` | Android smoke baseline with Koma, raw SQLite, GRDB, and SQLite.swift. |
 
-## Vector Search Optimization Branch
+## Performance Improvements Branch Validation
 
-Captured June 9, 2026 from the `feature/perf-improvements` working tree after adding Float32 embedding storage, bounded top-k selection, and unrolled in-place scan loops. Versus the June 5 capture below on the same machine: exact `nearest` dropped 7.389 ms to 5.603 ms on unchanged Float64 data (3.619 ms stored as Float32), and `nearestQuantized` dropped 2.384 ms to 1.432 ms while the raw-SQLite baselines held still.
+Captured June 9, 2026 from the `feature/perf-improvements` working tree. Versus the June 5 capture below on the same machine:
 
-- Command: `BENCHMARK_DISABLE_JEMALLOC=true scripts/benchmark-official.sh .benchmark-results/feature-perf-improvements-search-20260609 --filter ".*(nearest|hybrid|fullTextSearch|cosineScan|vector.encode|vector.decode|fusion).*" --metric wallClock --no-progress --time-units microseconds`
+- **Vector search**: Float32 embedding storage, bounded top-k selection, and unrolled in-place scan loops. Exact `nearest` dropped 7.389 ms to 5.747 ms on unchanged Float64 data (3.719 ms stored as Float32); `nearestQuantized` dropped 2.384 ms to 1.431 ms while the raw-SQLite baselines held still.
+- **JSON encode**: word-at-a-time string escaping, direct digit writes, and exported integer specializations took `encode.10k` from 3.451 ms to 1.490 ms.
+- **RRF fusion**: `fuse` is now inlinable (call-site specialization) and scores by list indices — 4.395 ms to 0.135 ms.
+- **GRDB comparability fix**: earlier GRDB captures ran in rollback-journal mode because the benchmark's WAL pragma was silently ignored inside a transaction; the harness now configures WAL for GRDB correctly. `grdb.sqlite.open.ensureSchema` rising from 0.344 ms to 0.825 ms reflects the corrected setup cost, not a regression.
+
+Run details:
+
+- Command: `BENCHMARK_DISABLE_JEMALLOC=true scripts/benchmark-official.sh .benchmark-results/feature-perf-improvements-full-20260609 --metric wallClock --no-progress --time-units microseconds`
 - Platform: Darwin 25.5.0 arm64
 - Swift: Apple Swift 6.3
-- Artifact: `.benchmark-results/feature-perf-improvements-search-20260609`
-- Git revision: `cf49d1c91d6f12b277ef05f17e89061fa517073d`
+- Artifact: `.benchmark-results/feature-perf-improvements-full-20260609`
+- Git revision: `f5f0fa70a76e353a5fa70efe28a55e4847d2143b`
 - Git dirty: false
 
 Lower is better.
+
+### Storage and Local Resource
+
+| Benchmark | p50 wall clock | p90 wall clock | Samples |
+| --- | ---: | ---: | ---: |
+| `koma.sqlite.open.ensureSchema` | 0.862 ms | 1.028 ms | 1104 |
+| `grdb.sqlite.open.ensureSchema` | 0.825 ms | 0.988 ms | 1164 |
+| `coredata.sqlite.open.ensureSchema` | 1.300 ms | 1.452 ms | 753 |
+| `koma.sqlite.batchUpsert.1k` | 1.567 ms | 1.730 ms | 571 |
+| `koma.sqlite.steadyUpsert.1k` | 1.675 ms | 1.889 ms | 578 |
+| `koma.sqlite.observedUpsert.1k.limit100` | 1.634 ms | 1.859 ms | 590 |
+| `koma.sqlite.fusedJSONUpsert.1k` | 1.774 ms | 1.910 ms | 552 |
+| `koma.sqlite.fusedJSONSteadyUpsert.1k` | 1.798 ms | 1.918 ms | 547 |
+| `rawsqlite.batchUpsert.1k` | 1.777 ms | 1.907 ms | 556 |
+| `grdb.sqlite.batchUpsert.1k` | 8.176 ms | 8.806 ms | 121 |
+| `coredata.sqlite.batchInsert.1k` | 7.135 ms | 7.500 ms | 139 |
+| `koma.sqlite.filteredOrderedFetch.10k.limit100` | 0.281 ms | 0.295 ms | 3417 |
+| `rawsqlite.filteredOrderedFetch.10k.limit100` | 0.270 ms | 0.286 ms | 3543 |
+| `grdb.sqlite.filteredOrderedFetch.10k.limit100` | 0.331 ms | 0.353 ms | 2899 |
+| `coredata.sqlite.filteredOrderedFetch.10k.limit100` | 0.521 ms | 0.551 ms | 1849 |
+| `koma.sqlite.innerJoinFilter.10k.limit100` | 4.473 ms | 4.739 ms | 221 |
+| `rawsqlite.innerJoinFilter.10k.limit100` | 4.526 ms | 4.719 ms | 220 |
+| `koma.sqlite.rightJoinMatched.10k.limit100` | 4.809 ms | 5.149 ms | 204 |
+| `rawsqlite.rightJoinMatched.10k.limit100` | 4.481 ms | 4.645 ms | 222 |
+| `koma.sqlite.leftJoinMissing.10k.limit100` | 7.102 ms | 7.303 ms | 140 |
+| `rawsqlite.leftJoinMissing.10k.limit100` | 7.320 ms | 7.582 ms | 136 |
+| `koma.resource.localOnly.10k.limit100` | 0.286 ms | 0.300 ms | 3345 |
+| `koma.resource.networkFirstFallback.1k` | 2.417 ms | 2.644 ms | 405 |
 
 ### Search and Vector
 
 | Benchmark | p50 wall clock | p90 wall clock | Samples |
 | --- | ---: | ---: | ---: |
-| `koma.sqlite.fullTextSearch.10k` | 0.401 ms | 0.425 ms | 2417 |
-| `rawsqlite.fullTextSearch.10k` | 0.445 ms | 0.474 ms | 2180 |
-| `grdb.sqlite.fullTextSearch.10k` | 0.412 ms | 0.436 ms | 2350 |
-| `koma.sqlite.nearest.10k.dim384` | 5.603 ms | 6.083 ms | 175 |
-| `koma.sqlite.nearestF32.10k.dim384` | 3.619 ms | 3.942 ms | 271 |
-| `rawsqlite.nearest.10k.dim384` | 7.655 ms | 7.893 ms | 131 |
-| `grdb.sqlite.nearest.10k.dim384` | 9.085 ms | 9.535 ms | 110 |
-| `koma.sqlite.nearestQuantized.10k.dim384` | 1.432 ms | 1.556 ms | 683 |
-| `koma.sqlite.nearestQuantizedF32.10k.dim384` | 1.419 ms | 1.536 ms | 687 |
-| `rawsqlite.nearestQuantized.10k.dim384` | 2.419 ms | 2.619 ms | 405 |
-| `koma.sqlite.hybridSearch.10k.dim384` | 6.648 ms | 6.996 ms | 150 |
-| `koma.sqlite.hybridSearchF32.10k.dim384` | 4.317 ms | 4.694 ms | 228 |
-| `rawsqlite.hybridSearch.10k.dim384` | 7.963 ms | 8.352 ms | 125 |
-| `grdb.sqlite.hybridSearch.10k.dim384` | 9.822 ms | 10.396 ms | 101 |
-| `koma.sqlite.hybridSearchQuantized.10k.dim384` | 2.386 ms | 2.619 ms | 409 |
-| `koma.sqlite.hybridSearchQuantizedF32.10k.dim384` | 2.345 ms | 2.574 ms | 417 |
-| `rawsqlite.hybridSearchQuantized.10k.dim384` | 3.361 ms | 3.596 ms | 293 |
-| `koma.vector.cosineScan.10k.dim384` | 1.893 ms | 1.944 ms | 528 |
-| `koma.vector.encode.1k.dim384` | 0.071 ms | 0.077 ms | 10000 |
-| `koma.vector.decode.1k.dim384` | 0.060 ms | 0.065 ms | 10000 |
-| `koma.fusion.rrf.2x1k` | 3.607 ms | 3.721 ms | 276 |
+| `koma.sqlite.fullTextSearch.10k` | 0.413 ms | 0.445 ms | 2339 |
+| `rawsqlite.fullTextSearch.10k` | 0.441 ms | 0.462 ms | 2207 |
+| `grdb.sqlite.fullTextSearch.10k` | 0.422 ms | 0.451 ms | 2284 |
+| `koma.sqlite.nearest.10k.dim384` | 5.747 ms | 5.976 ms | 173 |
+| `koma.sqlite.nearestF32.10k.dim384` | 3.719 ms | 3.838 ms | 268 |
+| `rawsqlite.nearest.10k.dim384` | 8.552 ms | 9.257 ms | 115 |
+| `grdb.sqlite.nearest.10k.dim384` | 8.315 ms | 8.593 ms | 120 |
+| `koma.sqlite.nearestQuantized.10k.dim384` | 1.431 ms | 1.502 ms | 683 |
+| `koma.sqlite.nearestQuantizedF32.10k.dim384` | 1.453 ms | 1.615 ms | 667 |
+| `rawsqlite.nearestQuantized.10k.dim384` | 2.707 ms | 2.990 ms | 361 |
+| `koma.sqlite.hybridSearch.10k.dim384` | 6.672 ms | 6.996 ms | 149 |
+| `koma.sqlite.hybridSearchF32.10k.dim384` | 4.420 ms | 4.674 ms | 224 |
+| `rawsqlite.hybridSearch.10k.dim384` | 8.278 ms | 8.520 ms | 121 |
+| `grdb.sqlite.hybridSearch.10k.dim384` | 8.905 ms | 9.232 ms | 112 |
+| `koma.sqlite.hybridSearchQuantized.10k.dim384` | 2.464 ms | 2.720 ms | 393 |
+| `koma.sqlite.hybridSearchQuantizedF32.10k.dim384` | 2.423 ms | 2.652 ms | 403 |
+| `rawsqlite.hybridSearchQuantized.10k.dim384` | 3.461 ms | 3.670 ms | 286 |
+| `koma.vector.cosineScan.10k.dim384` | 1.350 ms | 1.418 ms | 730 |
+| `koma.vector.encode.1k.dim384` | 0.077 ms | 0.086 ms | 10000 |
+| `koma.vector.decode.1k.dim384` | 0.064 ms | 0.068 ms | 10000 |
+| `koma.fusion.rrf.2x1k` | 0.135 ms | 0.144 ms | 6871 |
+
+### JSON Codecs
+
+| Benchmark | p50 wall clock | p90 wall clock | Samples |
+| --- | ---: | ---: | ---: |
+| `network.koma.json.records.decode.1k` | 0.175 ms | 0.184 ms | 5693 |
+| `network.foundation.jsondecoder.decode.1k` | 1.287 ms | 1.366 ms | 773 |
+| `network.yyjson.decoder.decode.1k` | 0.494 ms | 0.518 ms | 2023 |
+| `network.koma.json.records.decode.10k` | 1.796 ms | 1.859 ms | 558 |
+| `network.foundation.jsondecoder.decode.10k` | 14.205 ms | 16.171 ms | 69 |
+| `network.yyjson.decoder.decode.10k` | 5.071 ms | 5.304 ms | 196 |
+| `network.koma.json.records.encode.1k` | 0.153 ms | 0.162 ms | 6521 |
+| `network.foundation.jsonencoder.encode.1k` | 1.086 ms | 1.162 ms | 915 |
+| `network.yyjson.encoder.encode.1k` | 0.382 ms | 0.415 ms | 2590 |
+| `network.koma.json.records.encode.10k` | 1.490 ms | 2.092 ms | 623 |
+| `network.foundation.jsonencoder.encode.10k` | 10.830 ms | 11.395 ms | 92 |
+| `network.yyjson.encoder.encode.10k` | 3.860 ms | 4.057 ms | 259 |
+
+### Transport and Request Pipeline
+
+| Benchmark | p50 wall clock | p90 wall clock | Samples |
+| --- | ---: | ---: | ---: |
+| `network.koma.transport.get.jsonrecord.1k` | 0.268 ms | 0.287 ms | 3530 |
+| `network.koma.transport.get.decode.1k` | 1.346 ms | 1.415 ms | 733 |
+| `network.urlsession.get.decode.1k` | 1.358 ms | 1.440 ms | 724 |
+| `network.alamofire.get.decode.1k` | 1.553 ms | 1.810 ms | 626 |
+| `network.moya.get.decode.1k` | 1.442 ms | 1.524 ms | 683 |
+| `network.koma.resource.urlsession.networkFirstFallback.1k` | 2.382 ms | 2.542 ms | 414 |
+| `network.apollo.query.networkOnly.1k` | 39.846 ms | 41.058 ms | 26 |
 
 ## SQLite Raw SQL Branch Validation
 
 Captured June 5, 2026 from the `feat/sqlite-raw-sql` working tree after adding raw SQL, FTS5, exact vector search, trigger-maintained quantized vector indexes, and hybrid search.
+
+Caveat discovered after this capture: the GRDB wrapper's WAL pragma was silently ignored inside its setup transaction, so the `grdb.*` rows below ran in rollback-journal mode. This mostly flatters `grdb.sqlite.open.ensureSchema` (no WAL setup cost); see the June 9 capture above for corrected GRDB numbers.
 
 - Command: `BENCHMARK_DISABLE_JEMALLOC=true scripts/benchmark-official.sh .benchmark-results/feat-sqlite-raw-sql-clean-20260605 --metric wallClock --no-progress --time-units microseconds`
 - Platform: Darwin 25.5.0 arm64

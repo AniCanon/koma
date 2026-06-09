@@ -421,22 +421,22 @@ scripts/benchmark-android.sh .benchmark-results/local-android
 
 Benchmark dependencies are opt-in. The package only resolves Alamofire, Moya, Apollo, GRDB, and `swift-benchmark` when `KOMA_ENABLE_BENCHMARKS=1`; normal app consumers do not download them. SwiftData benchmarks are additionally opt-in for Xcode toolchains because the SwiftData model macro is not available in the open-source CLI toolchain by default.
 
-Lower is better. Read the storage and search tables as a closeness-to-raw check, not as a claim that Koma replaces hand-written SQLite everywhere. The fresh Apple/Darwin tables below are p50 wall-clock clean-branch numbers captured on June 5, 2026 with Apple Swift 6.3 on Darwin 25.5.0 arm64. Artifact: `.benchmark-results/feat-sqlite-raw-sql-clean-20260605`. Android emulator numbers remain the May 24, 2026 smoke baseline.
+Lower is better. Read the storage and search tables as a closeness-to-raw check, not as a claim that Koma replaces hand-written SQLite everywhere. The fresh Apple/Darwin tables below are p50 wall-clock clean-branch numbers captured on June 9, 2026 with Apple Swift 6.3 on Darwin 25.5.0 arm64. Artifact: `.benchmark-results/feature-perf-improvements-full-20260609`. Android emulator numbers remain the May 24, 2026 smoke baseline. GRDB numbers before this capture understated GRDB's setup cost — its benchmark's WAL pragma was silently ignored inside a transaction, so earlier GRDB databases ran in rollback-journal mode; the harness now configures WAL correctly for it.
 
 Apple/Darwin storage and local resources:
 
 | Operation | Koma | Raw SQLite | GRDB | Core Data |
 | --- | ---: | ---: | ---: | ---: |
-| Open + ensure schema | 0.866 ms | n/a | 0.344 ms | 1.255 ms |
-| Upsert or insert 1k records | 1.532 ms | 1.789 ms | 7.938 ms | 6.996 ms |
-| Steady upsert 1k | 1.546 ms | n/a | n/a | n/a |
-| Observed upsert 1k + refetch | 1.707 ms | n/a | n/a | n/a |
-| Fused JSON upsert 1k | 1.693 ms | n/a | n/a | n/a |
-| Filtered fetch 10k, limit 100 | 0.284 ms | 0.283 ms | 0.344 ms | 0.537 ms |
-| Inner join filter 10k, limit 100 | 4.461 ms | 4.641 ms | n/a | n/a |
-| Right join matched 10k, limit 100 | 5.030 ms | 4.530 ms | n/a | n/a |
-| Left join missing 10k, limit 100 | 7.053 ms | 8.057 ms | n/a | n/a |
-| Resource local-only fetch 10k, limit 100 | 0.299 ms | n/a | n/a | n/a |
+| Open + ensure schema | 0.862 ms | n/a | 0.825 ms | 1.300 ms |
+| Upsert or insert 1k records | 1.567 ms | 1.777 ms | 8.176 ms | 7.135 ms |
+| Steady upsert 1k | 1.675 ms | n/a | n/a | n/a |
+| Observed upsert 1k + refetch | 1.634 ms | n/a | n/a | n/a |
+| Fused JSON upsert 1k | 1.774 ms | n/a | n/a | n/a |
+| Filtered fetch 10k, limit 100 | 0.281 ms | 0.270 ms | 0.331 ms | 0.521 ms |
+| Inner join filter 10k, limit 100 | 4.473 ms | 4.526 ms | n/a | n/a |
+| Right join matched 10k, limit 100 | 4.809 ms | 4.481 ms | n/a | n/a |
+| Left join missing 10k, limit 100 | 7.102 ms | 7.320 ms | n/a | n/a |
+| Resource local-only fetch 10k, limit 100 | 0.286 ms | n/a | n/a | n/a |
 
 Android emulator storage:
 
@@ -451,10 +451,10 @@ JSON and request pipeline:
 
 | Platform | Operation | Koma | Foundation | YYJSON | Other |
 | --- | --- | ---: | ---: | ---: | ---: |
-| Apple/Darwin | Decode 1k records | 0.180 ms | 1.351 ms | 0.530 ms | n/a |
-| Apple/Darwin | Encode 1k records | 0.348 ms | 1.115 ms | 0.425 ms | n/a |
-| Apple/Darwin | Mock GET + decode 1k | 0.270 ms | URLSession + `JSONDecoder` 1.421 ms | n/a | Alamofire 1.516 ms, Moya 1.529 ms, Apollo 39.322 ms |
-| Apple/Darwin | Resource `networkFirstFallback` 1k | 2.210 ms | n/a | n/a | URLSession resource 2.570 ms |
+| Apple/Darwin | Decode 1k records | 0.175 ms | 1.287 ms | 0.494 ms | n/a |
+| Apple/Darwin | Encode 1k records | 0.153 ms | 1.086 ms | 0.382 ms | n/a |
+| Apple/Darwin | Mock GET + decode 1k | 0.268 ms | URLSession + `JSONDecoder` 1.358 ms | n/a | Alamofire 1.553 ms, Moya 1.442 ms, Apollo 39.846 ms |
+| Apple/Darwin | Resource `networkFirstFallback` 1k | 2.417 ms | n/a | n/a | URLSession resource 2.382 ms |
 | Android emulator | Decode 1k records | 0.420 ms | 1.640 ms | 0.949 ms | n/a |
 | Android emulator | Encode 1k records | 0.591 ms | 1.378 ms | 0.739 ms | n/a |
 
@@ -462,11 +462,11 @@ Local search and memory-store validation:
 
 | Operation | Koma exact | Koma quantized | Raw SQLite | Raw quantized | GRDB |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| FTS5 keyword search 10k | 0.401 ms | n/a | 0.445 ms | n/a | 0.412 ms |
-| Vector nearest 10k x 384 | 5.603 ms | 1.432 ms | 7.655 ms | 2.419 ms | 9.085 ms |
-| Vector nearest 10k x 384, `Float32` storage | 3.619 ms | 1.419 ms | n/a | n/a | n/a |
-| Hybrid keyword + vector 10k x 384 | 6.648 ms | 2.386 ms | 7.963 ms | 3.361 ms | 9.822 ms |
-| Hybrid keyword + vector 10k x 384, `Float32` storage | 4.317 ms | 2.345 ms | n/a | n/a | n/a |
+| FTS5 keyword search 10k | 0.413 ms | n/a | 0.441 ms | n/a | 0.422 ms |
+| Vector nearest 10k x 384 | 5.747 ms | 1.431 ms | 8.552 ms | 2.707 ms | 8.315 ms |
+| Vector nearest 10k x 384, `Float32` storage | 3.719 ms | 1.453 ms | n/a | n/a | n/a |
+| Hybrid keyword + vector 10k x 384 | 6.672 ms | 2.464 ms | 8.278 ms | 3.461 ms | 8.905 ms |
+| Hybrid keyword + vector 10k x 384, `Float32` storage | 4.420 ms | 2.423 ms | n/a | n/a | n/a |
 
 Full methodology and historical runs live in [Benchmark Results](docs/benchmarks/results.md). Each publishable run should include raw output plus metadata for the Koma revision, Swift toolchain, platform, and command.
 
