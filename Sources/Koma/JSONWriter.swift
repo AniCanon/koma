@@ -62,18 +62,30 @@ public struct KomaJSONWriter {
         try writeField(key, value, isFirst: &isFirst)
     }
 
-    public mutating func writeField(
+    /// Exported specializations keep macro-generated encoders in other modules off the
+    /// generic-metadata path (see the matching readInteger specializations in JSONScanner).
+    @_specialize(exported: true, where Value == Int)
+    @_specialize(exported: true, where Value == Int64)
+    @_specialize(exported: true, where Value == Int32)
+    @_specialize(exported: true, where Value == Int16)
+    @_specialize(exported: true, where Value == Int8)
+    public mutating func writeField<Value: FixedWidthInteger>(
         _ key: StaticString,
-        _ value: some FixedWidthInteger,
+        _ value: Value,
         isFirst: inout Bool
     ) throws {
         writeKey(key, isFirst: &isFirst)
         writeInteger(value)
     }
 
-    public mutating func writeField(
+    @_specialize(exported: true, where Value == Int)
+    @_specialize(exported: true, where Value == Int64)
+    @_specialize(exported: true, where Value == Int32)
+    @_specialize(exported: true, where Value == Int16)
+    @_specialize(exported: true, where Value == Int8)
+    public mutating func writeField<Value: FixedWidthInteger>(
         _ key: StaticString,
-        _ value: (some FixedWidthInteger)?,
+        _ value: Value?,
         isFirst: inout Bool
     ) throws {
         guard let value else {
@@ -128,12 +140,57 @@ public struct KomaJSONWriter {
         bytes.append(JSONByte.colon.rawValue)
     }
 
+    /// Writes a quoted, escaped JSON string. The scan walks the UTF-8 bytes a word at a time
+    /// (SWAR — hardware-SIMD types pessimize short payloads here, see the scanner) and bulk-appends
+    /// maximal runs that need no escaping, so the per-byte escape switch only runs on the rare
+    /// quote/backslash/control bytes.
     private mutating func writeString(_ value: String) {
         bytes.append(JSONByte.quote.rawValue)
-        for byte in value.utf8 {
-            writeStringByte(byte)
+        var value = value
+        value.withUTF8 { buffer in
+            guard let base = buffer.baseAddress else { return }
+            let count = buffer.count
+            var start = 0
+            var index = 0
+            while index < count {
+                if index + 8 <= count,
+                   Self.escapeCandidates(UnsafeRawPointer(base + index).loadUnaligned(as: UInt64.self)) == 0
+                {
+                    index += 8
+                    continue
+                }
+                let byte = buffer[index]
+                if Self.needsEscape(byte) {
+                    if index > start {
+                        bytes.append(contentsOf: UnsafeBufferPointer(rebasing: buffer[start ..< index]))
+                    }
+                    writeStringByte(byte)
+                    start = index + 1
+                }
+                index += 1
+            }
+            if count > start {
+                bytes.append(contentsOf: UnsafeBufferPointer(rebasing: buffer[start ..< count]))
+            }
         }
         bytes.append(JSONByte.quote.rawValue)
+    }
+
+    private static func needsEscape(_ byte: UInt8) -> Bool {
+        byte < 0x20 || byte == JSONByte.quote.rawValue || byte == JSONByte.backslash.rawValue
+    }
+
+    /// Flags any byte of `word` that is a quote, backslash, or control byte (the standard
+    /// SWAR has-less/has-value bit tricks; high bits of multi-byte UTF-8 never flag).
+    private static func escapeCandidates(_ word: UInt64) -> UInt64 {
+        let ones: UInt64 = 0x0101_0101_0101_0101
+        let highs: UInt64 = 0x8080_8080_8080_8080
+        let belowSpace = (word &- 0x2020_2020_2020_2020) & ~word & highs
+        let quotes = word ^ (ones &* UInt64(JSONByte.quote.rawValue))
+        let backslashes = word ^ (ones &* UInt64(JSONByte.backslash.rawValue))
+        let isQuote = (quotes &- ones) & ~quotes & highs
+        let isBackslash = (backslashes &- ones) & ~backslashes & highs
+        return belowSpace | isQuote | isBackslash
     }
 
     private mutating func writeStringByte(_ byte: UInt8) {
@@ -176,15 +233,39 @@ public struct KomaJSONWriter {
     }
 
     private mutating func writeBool(_ value: Bool) {
-        writeRaw(value ? "true" : "false")
+        if value {
+            bytes.append(contentsOf: [116, 114, 117, 101]) // true
+        } else {
+            bytes.append(contentsOf: [102, 97, 108, 115, 101]) // false
+        }
     }
 
+    /// Writes the decimal digits straight into the buffer — no intermediate `String`.
     private mutating func writeInteger(_ value: some FixedWidthInteger) {
-        writeRaw(String(value))
+        guard value != 0 else {
+            bytes.append(48)
+            return
+        }
+        var magnitude = value.magnitude
+        // 40 covers the digits of any FixedWidthInteger up to 128 bits, plus a sign.
+        withUnsafeTemporaryAllocation(of: UInt8.self, capacity: 40) { digits in
+            var position = digits.count
+            while magnitude != 0 {
+                position -= 1
+                digits[position] = 48 + UInt8(truncatingIfNeeded: magnitude % 10)
+                magnitude /= 10
+            }
+            if value < 0 {
+                position -= 1
+                digits[position] = 45 // -
+            }
+            bytes.append(contentsOf: UnsafeBufferPointer(rebasing: digits[position...]))
+        }
     }
 
     private mutating func writeRaw(_ value: String) {
-        bytes.append(contentsOf: value.utf8)
+        var value = value
+        value.withUTF8 { bytes.append(contentsOf: $0) }
     }
 
     private static func hexDigit(_ value: UInt8) -> UInt8 {
