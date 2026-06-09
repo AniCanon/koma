@@ -8,7 +8,10 @@ extension KomaJSONScanner {
             offset += 1
         }
 
-        var value: Int64 = 0
+        // Accumulate the magnitude with overflow-checked arithmetic: unchecked `value * 10`
+        // would TRAP on oversized input (a crash reachable from attacker-controlled payloads),
+        // and Int64.min has no positive Int64 counterpart.
+        var magnitude: UInt64 = 0
         var readDigit = false
         while offset < buffer.count {
             let byte = buffer[offset]
@@ -16,7 +19,12 @@ extension KomaJSONScanner {
                 break
             }
             readDigit = true
-            value = value * 10 + Int64(byte - 48)
+            let (scaled, multiplyOverflowed) = magnitude.multipliedReportingOverflow(by: 10)
+            let (next, addOverflowed) = scaled.addingReportingOverflow(UInt64(byte - 48))
+            guard !multiplyOverflowed, !addOverflowed else {
+                throw KomaJSONFastPathError.integerOverflow("Int64")
+            }
+            magnitude = next
             offset += 1
         }
 
@@ -26,7 +34,16 @@ extension KomaJSONScanner {
         guard !isNumberContinuation(peek()) else {
             throw KomaJSONFastPathError.invalidNumber(offset: start)
         }
-        return value * sign
+        if sign < 0 {
+            guard magnitude <= UInt64(Int64.max) + 1 else {
+                throw KomaJSONFastPathError.integerOverflow("Int64")
+            }
+            return magnitude == UInt64(Int64.max) + 1 ? Int64.min : 0 &- Int64(magnitude)
+        }
+        guard magnitude <= UInt64(Int64.max) else {
+            throw KomaJSONFastPathError.integerOverflow("Int64")
+        }
+        return Int64(magnitude)
     }
 
     mutating func readNumberRange() throws -> Range<Int> {

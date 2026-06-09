@@ -56,7 +56,10 @@ private final class GRDBBenchmarkDatabase: @unchecked Sendable {
 
     init(path: String) throws {
         queue = try DatabaseQueue(path: path)
-        try queue.write { database in
+        // PRAGMA journal_mode cannot take effect inside a transaction, and `write` wraps its
+        // closure in one — the pragma was silently leaving the database in rollback-journal
+        // mode, skipping the WAL setup cost every other provider pays in this benchmark.
+        try queue.writeWithoutTransaction { database in
             try database.execute(sql: "PRAGMA journal_mode = WAL")
             try database.execute(sql: "PRAGMA foreign_keys = ON")
             try database.execute(
@@ -190,7 +193,8 @@ private final class GRDBMemoryDatabase: @unchecked Sendable {
 
     init(path: String) throws {
         queue = try DatabaseQueue(path: path)
-        try queue.write { database in
+        // See GRDBBenchmarkDatabase: the WAL pragma is a no-op inside `write`'s transaction.
+        try queue.writeWithoutTransaction { database in
             try database.execute(sql: "PRAGMA journal_mode = WAL")
             try database.execute(
                 sql: """

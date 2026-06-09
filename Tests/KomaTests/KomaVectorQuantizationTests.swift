@@ -29,6 +29,21 @@ struct KomaVectorQuantizationTests {
     }
 
     @Test
+    func `vector encode decode round trips float32`() {
+        let vector = [1.0, -0.5, 0.25, 0]
+        let blob = KomaVector.encode(vector, as: .float32)
+        #expect(blob.count == vector.count * MemoryLayout<Float>.stride)
+        #expect(KomaVector.decode(blob, as: .float32) == vector)
+    }
+
+    @Test
+    func `float64 precision encode matches the default encoder`() {
+        let vector = [1.0, -0.5, 0.25, 0]
+        #expect(KomaVector.encode(vector, as: .float64) == KomaVector.encode(vector))
+        #expect(KomaVector.decode(KomaVector.encode(vector), as: .float64) == vector)
+    }
+
+    @Test
     func `int8 over-fetch contains the exact nearest neighbors`() {
         let dimension = 64
         let documents = (0 ..< 300).map { vector(seed: UInt64($0), dimension: dimension) }

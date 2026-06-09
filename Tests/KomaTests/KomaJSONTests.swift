@@ -153,6 +153,80 @@ struct KomaJSONTests {
     }
 
     @Test
+    func `JSON record path escapes every string class and round trips`() throws {
+        // Quotes, backslashes, the named control escapes, an arbitrary control byte, multi-byte
+        // UTF-8, and runs longer than the writer's 8-byte word stride with escapes at varying
+        // offsets so word-boundary handling is exercised.
+        let nicknames = [
+            "say \"hi\" \\ done",
+            "\u{08}\u{0C}\n\r\t\u{01}\u{1F}",
+            "héllo 日本語 🚀 plain tail",
+            String(repeating: "a", count: 23) + "\"" + String(repeating: "b", count: 9),
+            "\"leading and trailing\""
+        ]
+
+        for nickname in nicknames {
+            let record = JSONCommonScalarRecord(
+                id: "escape",
+                isActive: false,
+                visits: 1,
+                rating: 1,
+                progress: 1,
+                createdAt: Date(timeIntervalSinceReferenceDate: 0),
+                nickname: nickname
+            )
+
+            let body = try record.komaJSONData()
+            #expect(try JSONCommonScalarRecord.komaJSONRecord(from: body) == record)
+
+            // Cross-validate against Foundation so a writer bug can't be masked by a
+            // matching scanner bug.
+            let object = try JSONSerialization.jsonObject(with: body) as? [String: Any]
+            #expect(object?["nickname"] as? String == nickname)
+        }
+    }
+
+    @Test
+    func `JSON record path round trips integer extremes`() throws {
+        for visits in [Int64.max, Int64.min, -1, 0, 42] {
+            let record = JSONCommonScalarRecord(
+                id: "extremes",
+                isActive: false,
+                visits: visits,
+                rating: 1,
+                progress: 1,
+                createdAt: Date(timeIntervalSinceReferenceDate: 0),
+                nickname: nil
+            )
+
+            let body = try record.komaJSONData()
+            #expect(try JSONCommonScalarRecord.komaJSONRecord(from: body) == record)
+        }
+        let body = try JSONCommonScalarRecord(
+            id: "extremes",
+            isActive: false,
+            visits: Int64.min,
+            rating: 1,
+            progress: 1,
+            createdAt: Date(timeIntervalSinceReferenceDate: 0),
+            nickname: nil
+        ).komaJSONData()
+        #expect(String(data: body, encoding: .utf8)?.contains("\"visits\":-9223372036854775808") == true)
+    }
+
+    @Test
+    func `JSON record path throws on integer overflow instead of trapping`() throws {
+        for visits in ["9223372036854775808", "-9223372036854775809", "99999999999999999999999"] {
+            let body = Data(
+                #"{"id":"x","isActive":true,"visits":\#(visits),"rating":1,"progress":1,"createdAt":0}"#.utf8
+            )
+            #expect(throws: (any Error).self) {
+                try JSONCommonScalarRecord.komaJSONRecord(from: body)
+            }
+        }
+    }
+
+    @Test
     func `JSON record path falls back for high precision doubles`() throws {
         let body = Data(
             #"{"id":"scalar-1","isActive":true,"visits":1,"rating":0.123456789012345678901,"progress":0.25,"createdAt":789.5}"#.utf8

@@ -16,6 +16,19 @@ private struct HybridMemoryRecord: KomaEntityRecord, Equatable {
     }
 }
 
+@KomaEntity(table: "hybrid_memories_f32")
+private struct HybridMemoryRecordF32: KomaEntityRecord, Equatable {
+    @KomaPrimaryKey var id: String
+    var content: String
+    var embedding: Data
+
+    init(id: String, content: String, embedding: [Double]) {
+        self.id = id
+        self.content = content
+        self.embedding = KomaVector.encode(embedding, as: .float32)
+    }
+}
+
 struct KomaHybridSearchTests {
     private func makeStore() async throws -> SQLiteKomaStore {
         let path = FileManager.default.temporaryDirectory
@@ -36,6 +49,49 @@ struct KomaHybridSearchTests {
         ])
 
         let near = try await store.nearest(HybridMemoryRecord.self, to: [1, 0, 0], on: \.embedding, limit: 2)
+
+        #expect(near.map(\.record.id) == ["a", "c"])
+        #expect(near[0].similarity > near[1].similarity)
+    }
+
+    @Test
+    func `nearest ranks float32 encoded vectors and skips other widths`() async throws {
+        let path = FileManager.default.temporaryDirectory
+            .appendingPathComponent("koma-hybrid-f32-\(UUID().uuidString).sqlite").path
+        let store = try await SQLiteKomaStore(path: path)
+        try await store.ensureSchema(for: HybridMemoryRecordF32.self)
+        try await store.upsert([
+            HybridMemoryRecordF32(id: "a", content: "identical", embedding: [1, 0, 0]),
+            HybridMemoryRecordF32(id: "b", content: "orthogonal", embedding: [0, 1, 0]),
+            HybridMemoryRecordF32(id: "c", content: "close", embedding: [0.9, 0.1, 0])
+        ])
+
+        let near = try await store.nearest(HybridMemoryRecordF32.self, to: [1, 0, 0], on: \.embedding, limit: 2)
+
+        #expect(near.map(\.record.id) == ["a", "c"])
+        #expect(near[0].similarity > near[1].similarity)
+    }
+
+    @Test
+    func `quantized index supports float32 storage`() async throws {
+        let path = FileManager.default.temporaryDirectory
+            .appendingPathComponent("koma-hybrid-f32q-\(UUID().uuidString).sqlite").path
+        let store = try await SQLiteKomaStore(path: path)
+        try await store.ensureSchema(for: HybridMemoryRecordF32.self)
+        try await store.upsert([
+            HybridMemoryRecordF32(id: "a", content: "identical", embedding: [1, 0, 0]),
+            HybridMemoryRecordF32(id: "b", content: "orthogonal", embedding: [0, 1, 0]),
+            HybridMemoryRecordF32(id: "c", content: "close", embedding: [0.9, 0.1, 0])
+        ])
+        try await store.createQuantizedVectorIndex(for: HybridMemoryRecordF32.self, on: \.embedding, precision: .float32)
+
+        let near = try await store.nearestQuantized(
+            HybridMemoryRecordF32.self,
+            to: [1, 0, 0],
+            on: \.embedding,
+            limit: 2,
+            overfetch: 3
+        )
 
         #expect(near.map(\.record.id) == ["a", "c"])
         #expect(near[0].similarity > near[1].similarity)

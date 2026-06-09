@@ -20,6 +20,20 @@ struct BenchmarkMemoryRecord: KomaEntityRecord, Equatable {
     }
 }
 
+/// Same shape with the embedding stored as `Float32` — half the scan I/O of the record above.
+@KomaEntity(table: "benchmark_memories_f32")
+struct BenchmarkMemoryRecordF32: KomaEntityRecord, Equatable {
+    @KomaPrimaryKey var id: String
+    var content: String
+    var embedding: Data
+
+    init(id: String, content: String, embedding: [Double]) {
+        self.id = id
+        self.content = content
+        self.embedding = KomaVector.encode(embedding, as: .float32)
+    }
+}
+
 enum MemoryBenchmarkFixtures {
     static let dimension = 384
     static let corpus = 10000
@@ -66,6 +80,28 @@ enum MemoryBenchmarkFixtures {
             try await store.upsert(records)
             if quantized {
                 try await store.createQuantizedVectorIndex(for: BenchmarkMemoryRecord.self, on: \.embedding)
+            }
+            return store
+        }
+    }
+
+    static let recordsF32: [BenchmarkMemoryRecordF32] = (0 ..< corpus).map {
+        BenchmarkMemoryRecordF32(id: "\($0)", content: content($0), embedding: vectors[$0])
+    }
+
+    static func storeF32(_ label: String, quantized: Bool = false) async throws -> SQLiteKomaStore {
+        try await BenchmarkFixtureCache.shared.value(label) {
+            let path = BenchmarkFixtures.databasePath(label)
+            let store = try await SQLiteKomaStore(path: path)
+            try await store.ensureSchema(for: BenchmarkMemoryRecordF32.self)
+            try await store.createFullTextIndex(for: BenchmarkMemoryRecordF32.self, indexing: \.content)
+            try await store.upsert(recordsF32)
+            if quantized {
+                try await store.createQuantizedVectorIndex(
+                    for: BenchmarkMemoryRecordF32.self,
+                    on: \.embedding,
+                    precision: .float32
+                )
             }
             return store
         }
@@ -183,6 +219,71 @@ func registerHybridSearchBenchmarks() {
         for _ in benchmark.scaledIterations {
             let results = try await store.hybridSearch(
                 BenchmarkMemoryRecord.self,
+                matching: "swift",
+                near: query,
+                on: \.embedding,
+                identifiedBy: \.id,
+                limit: 20,
+                vectorSearch: .quantized(overfetch: 10)
+            )
+            blackHole(results.count)
+        }
+        benchmark.stopMeasurement()
+    }
+}
+
+/// Same store paths over `Float32` embeddings — half the scan and rerank I/O of the
+/// `Float64` benchmarks above.
+func registerHybridSearchFloat32Benchmarks() {
+    let fixtures = MemoryBenchmarkFixtures.self
+
+    Benchmark("koma.sqlite.nearestF32.10k.dim384") { benchmark in
+        let store = try await fixtures.storeF32("koma-memories-nearest-f32")
+        let query = fixtures.query
+        benchmark.startMeasurement()
+        for _ in benchmark.scaledIterations {
+            let near = try await store.nearest(BenchmarkMemoryRecordF32.self, to: query, on: \.embedding, limit: 20)
+            blackHole(near.count)
+        }
+        benchmark.stopMeasurement()
+    }
+
+    Benchmark("koma.sqlite.nearestQuantizedF32.10k.dim384") { benchmark in
+        let store = try await fixtures.storeF32("koma-memories-nearest-quantized-f32", quantized: true)
+        let query = fixtures.query
+        benchmark.startMeasurement()
+        for _ in benchmark.scaledIterations {
+            let near = try await store.nearestQuantized(BenchmarkMemoryRecordF32.self, to: query, on: \.embedding, limit: 20)
+            blackHole(near.count)
+        }
+        benchmark.stopMeasurement()
+    }
+
+    Benchmark("koma.sqlite.hybridSearchF32.10k.dim384") { benchmark in
+        let store = try await fixtures.storeF32("koma-memories-hybrid-f32")
+        let query = fixtures.query
+        benchmark.startMeasurement()
+        for _ in benchmark.scaledIterations {
+            let results = try await store.hybridSearch(
+                BenchmarkMemoryRecordF32.self,
+                matching: "swift",
+                near: query,
+                on: \.embedding,
+                identifiedBy: \.id,
+                limit: 20
+            )
+            blackHole(results.count)
+        }
+        benchmark.stopMeasurement()
+    }
+
+    Benchmark("koma.sqlite.hybridSearchQuantizedF32.10k.dim384") { benchmark in
+        let store = try await fixtures.storeF32("koma-memories-hybrid-quantized-f32", quantized: true)
+        let query = fixtures.query
+        benchmark.startMeasurement()
+        for _ in benchmark.scaledIterations {
+            let results = try await store.hybridSearch(
+                BenchmarkMemoryRecordF32.self,
                 matching: "swift",
                 near: query,
                 on: \.embedding,

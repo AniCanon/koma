@@ -55,8 +55,8 @@ Koma's search APIs are intended for single-device local memory stores and other 
 - `rawQuery` and `rawExecute` expose custom SQLite with typed arguments. Raw writes can pass `invalidating: [tableName]` so live observations refetch without Koma trying to parse arbitrary SQL.
 - `createFullTextIndex` builds an external-content FTS5 table, creates insert/update/delete triggers, and rebuilds from existing rows so migrations can add search later.
 - `fullTextSearch` returns typed records ranked by FTS5 relevance.
-- `nearest` performs exact cosine search over `KomaVector.encode` `Float64` blobs. It scans every matching row, so it is predictable and exact but O(n).
-- `createQuantizedVectorIndex` builds a sidecar table named `<table>_<column>_i8`, backfills it, and keeps it current with SQLite triggers.
+- `nearest` performs exact cosine search over `KomaVector.encode` blobs, detecting `Float64` vs `Float32` storage per row. It scans every matching row, so it is predictable and exact but O(n); `Float32` storage halves the scan I/O.
+- `createQuantizedVectorIndex` builds a sidecar table named `<table>_<column>_i8`, backfills it, and keeps it current with SQLite triggers. Pass `precision: .float32` when the column stores `Float32` vectors.
 - `nearestQuantized` scans the int8 sidecar, over-fetches candidates, and reranks those candidates with full-precision cosine before returning typed records.
 - `hybridSearch` fuses FTS5 keyword recall and vector recall with reciprocal-rank fusion. Use `vectorSearch: .quantized(overfetch:)` only after creating the quantized vector index.
 

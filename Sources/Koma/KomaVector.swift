@@ -9,6 +9,17 @@ public enum KomaVector {
         vector.withUnsafeBytes { Data($0) }
     }
 
+    /// Encodes a vector at the given storage precision. `.float32` halves the vector-scan I/O —
+    /// the right choice when the embedding source is itself single-precision (most are).
+    public static func encode(_ vector: [Double], as precision: KomaVectorPrecision) -> Data {
+        switch precision {
+        case .float64:
+            return encode(vector)
+        case .float32:
+            return vector.map(Float.init).withUnsafeBytes { Data($0) }
+        }
+    }
+
     /// Decodes a contiguous `Float64` BLOB (see `encode(_:)`) back into a vector.
     public static func decode(_ data: Data) -> [Double] {
         let stride = MemoryLayout<Double>.stride
@@ -27,6 +38,23 @@ public enum KomaVector {
                 offset += stride
             }
             return vector
+        }
+    }
+
+    /// Decodes a vector BLOB written at the given precision (see `encode(_:as:)`). The precision
+    /// must match the one used to encode — blob length alone cannot distinguish the two widths.
+    public static func decode(_ data: Data, as precision: KomaVectorPrecision) -> [Double] {
+        switch precision {
+        case .float64:
+            return decode(data)
+        case .float32:
+            let stride = MemoryLayout<Float>.stride
+            guard !data.isEmpty, data.count.isMultiple(of: stride) else { return [] }
+            return data.withUnsafeBytes { raw in
+                (0 ..< raw.count / stride).map {
+                    Double(raw.loadUnaligned(fromByteOffset: $0 * stride, as: Float.self))
+                }
+            }
         }
     }
 
@@ -71,17 +99,52 @@ public enum KomaVector {
     public static func cosine(_ a: [Double], _ b: [Double]) -> Double {
         guard a.count == b.count, !a.isEmpty else { return 0 }
 
-        var dot = 0.0
-        var normA = 0.0
-        var normB = 0.0
-        for index in a.indices {
-            dot += a[index] * b[index]
-            normA += a[index] * a[index]
-            normB += b[index] * b[index]
+        // Two independent accumulators per sum break the FMA latency chain (the same shape as
+        // the SQLite scan loops); a single chain leaves the FPU mostly idle.
+        return a.withUnsafeBufferPointer { lhs in
+            b.withUnsafeBufferPointer { rhs in
+                let count = lhs.count
+                var dot0 = 0.0, dot1 = 0.0
+                var normA0 = 0.0, normA1 = 0.0
+                var normB0 = 0.0, normB1 = 0.0
+                var index = 0
+                while index + 2 <= count {
+                    let a0 = lhs[index], a1 = lhs[index + 1]
+                    let b0 = rhs[index], b1 = rhs[index + 1]
+                    dot0 += a0 * b0
+                    dot1 += a1 * b1
+                    normA0 += a0 * a0
+                    normA1 += a1 * a1
+                    normB0 += b0 * b0
+                    normB1 += b1 * b1
+                    index += 2
+                }
+                if index < count {
+                    let a0 = lhs[index], b0 = rhs[index]
+                    dot0 += a0 * b0
+                    normA0 += a0 * a0
+                    normB0 += b0 * b0
+                }
+                let magnitude = (normA0 + normA1).squareRoot() * (normB0 + normB1).squareRoot()
+                return magnitude == 0 ? 0 : (dot0 + dot1) / magnitude
+            }
         }
+    }
+}
 
-        let magnitude = normA.squareRoot() * normB.squareRoot()
-        return magnitude == 0 ? 0 : dot / magnitude
+/// Storage width of a vector BLOB's components (see `KomaVector.encode(_:as:)`).
+public enum KomaVectorPrecision: Equatable, Sendable {
+    /// 8 bytes per dimension; round-trips `Double` exactly.
+    case float64
+    /// 4 bytes per dimension; half the storage and scan I/O of `.float64`.
+    case float32
+
+    /// Bytes per vector component at this precision.
+    public var stride: Int {
+        switch self {
+        case .float64: MemoryLayout<Double>.stride
+        case .float32: MemoryLayout<Float>.stride
+        }
     }
 }
 
