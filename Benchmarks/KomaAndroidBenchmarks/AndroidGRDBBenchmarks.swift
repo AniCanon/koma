@@ -59,7 +59,9 @@ private final class AndroidGRDBBenchmarkDatabase {
 
     init(path: String) throws {
         queue = try DatabaseQueue(path: path)
-        try queue.write { database in
+        // PRAGMA journal_mode is a no-op inside `write`'s transaction (the database silently
+        // stays in rollback-journal mode), so configure without the transaction wrapper.
+        try queue.writeWithoutTransaction { database in
             try database.execute(sql: "PRAGMA journal_mode = WAL")
             try database.execute(sql: "PRAGMA foreign_keys = ON")
             try database.execute(sql: Self.projectSchema)
