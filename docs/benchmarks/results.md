@@ -4,10 +4,50 @@ Koma publishes small p50 snapshots in the README and keeps fuller benchmark cont
 
 | Koma Version | Environment | Swift | Artifact | Notes |
 | --- | --- | --- | --- | --- |
+| Vector search optimization branch | Darwin 25.5.0 arm64, SwiftPM benchmark runner | Swift 6.3 release | `.benchmark-results/feature-perf-improvements-search-20260609` | Clean-branch validation for the Float32 storage precision, bounded top-k selection, and unrolled scan loops. Search and vector benchmarks only. |
 | SQLite raw SQL branch validation | Darwin 25.5.0 arm64, SwiftPM benchmark runner | Swift 6.3 release | `.benchmark-results/feat-sqlite-raw-sql-clean-20260605` | Clean-branch validation for raw SQL, FTS5, exact vector search, quantized vector search, hybrid search, storage, JSON, and request-pipeline benchmarks. |
 | Live observation branch | Darwin 25.4.0 arm64, SwiftPM benchmark runner | Swift 6.3 release | `.benchmark-results/live-observation-final-20260525` | Final host pass for live observation, fused JSON-to-SQLite binding, generated key dispatch, and projection fast paths. Host GRDB was disabled for this run because this Swift 6.3 toolchain still fails the GRDB benchmark target in release mode. |
 | Open-source prep | Darwin 25.4.0 arm64, SwiftPM benchmark runner | Swift 6.3 release | `.benchmark-results/koma-open-source-apple-20260524` | Apple-platform baseline for the iOS-side runtime, not an on-device iOS claim. Host GRDB storage comparison was disabled for this run because this Swift 6.3 toolchain crashed while compiling the GRDB benchmark target. |
 | Open-source prep | Google sdk_gphone16k_arm64 emulator, Android 17 SDK 37 | Swift 6.3 release Android SDK | `.benchmark-results/koma-open-source-android-emulator-20260524` | Android smoke baseline with Koma, raw SQLite, GRDB, and SQLite.swift. |
+
+## Vector Search Optimization Branch
+
+Captured June 9, 2026 from the `feature/perf-improvements` working tree after adding Float32 embedding storage, bounded top-k selection, and unrolled in-place scan loops. Versus the June 5 capture below on the same machine: exact `nearest` dropped 7.389 ms to 5.603 ms on unchanged Float64 data (3.619 ms stored as Float32), and `nearestQuantized` dropped 2.384 ms to 1.432 ms while the raw-SQLite baselines held still.
+
+- Command: `BENCHMARK_DISABLE_JEMALLOC=true scripts/benchmark-official.sh .benchmark-results/feature-perf-improvements-search-20260609 --filter ".*(nearest|hybrid|fullTextSearch|cosineScan|vector.encode|vector.decode|fusion).*" --metric wallClock --no-progress --time-units microseconds`
+- Platform: Darwin 25.5.0 arm64
+- Swift: Apple Swift 6.3
+- Artifact: `.benchmark-results/feature-perf-improvements-search-20260609`
+- Git revision: `cf49d1c91d6f12b277ef05f17e89061fa517073d`
+- Git dirty: false
+
+Lower is better.
+
+### Search and Vector
+
+| Benchmark | p50 wall clock | p90 wall clock | Samples |
+| --- | ---: | ---: | ---: |
+| `koma.sqlite.fullTextSearch.10k` | 0.401 ms | 0.425 ms | 2417 |
+| `rawsqlite.fullTextSearch.10k` | 0.445 ms | 0.474 ms | 2180 |
+| `grdb.sqlite.fullTextSearch.10k` | 0.412 ms | 0.436 ms | 2350 |
+| `koma.sqlite.nearest.10k.dim384` | 5.603 ms | 6.083 ms | 175 |
+| `koma.sqlite.nearestF32.10k.dim384` | 3.619 ms | 3.942 ms | 271 |
+| `rawsqlite.nearest.10k.dim384` | 7.655 ms | 7.893 ms | 131 |
+| `grdb.sqlite.nearest.10k.dim384` | 9.085 ms | 9.535 ms | 110 |
+| `koma.sqlite.nearestQuantized.10k.dim384` | 1.432 ms | 1.556 ms | 683 |
+| `koma.sqlite.nearestQuantizedF32.10k.dim384` | 1.419 ms | 1.536 ms | 687 |
+| `rawsqlite.nearestQuantized.10k.dim384` | 2.419 ms | 2.619 ms | 405 |
+| `koma.sqlite.hybridSearch.10k.dim384` | 6.648 ms | 6.996 ms | 150 |
+| `koma.sqlite.hybridSearchF32.10k.dim384` | 4.317 ms | 4.694 ms | 228 |
+| `rawsqlite.hybridSearch.10k.dim384` | 7.963 ms | 8.352 ms | 125 |
+| `grdb.sqlite.hybridSearch.10k.dim384` | 9.822 ms | 10.396 ms | 101 |
+| `koma.sqlite.hybridSearchQuantized.10k.dim384` | 2.386 ms | 2.619 ms | 409 |
+| `koma.sqlite.hybridSearchQuantizedF32.10k.dim384` | 2.345 ms | 2.574 ms | 417 |
+| `rawsqlite.hybridSearchQuantized.10k.dim384` | 3.361 ms | 3.596 ms | 293 |
+| `koma.vector.cosineScan.10k.dim384` | 1.893 ms | 1.944 ms | 528 |
+| `koma.vector.encode.1k.dim384` | 0.071 ms | 0.077 ms | 10000 |
+| `koma.vector.decode.1k.dim384` | 0.060 ms | 0.065 ms | 10000 |
+| `koma.fusion.rrf.2x1k` | 3.607 ms | 3.721 ms | 276 |
 
 ## SQLite Raw SQL Branch Validation
 

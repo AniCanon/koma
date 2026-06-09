@@ -462,9 +462,11 @@ Local search and memory-store validation:
 
 | Operation | Koma exact | Koma quantized | Raw SQLite | Raw quantized | GRDB |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| FTS5 keyword search 10k | 0.414 ms | n/a | 0.476 ms | n/a | 0.438 ms |
-| Vector nearest 10k x 384 | 7.389 ms | 2.384 ms | 7.729 ms | 2.460 ms | 8.774 ms |
-| Hybrid keyword + vector 10k x 384 | 7.950 ms | 3.355 ms | 8.634 ms | 3.625 ms | 9.650 ms |
+| FTS5 keyword search 10k | 0.401 ms | n/a | 0.445 ms | n/a | 0.412 ms |
+| Vector nearest 10k x 384 | 5.603 ms | 1.432 ms | 7.655 ms | 2.419 ms | 9.085 ms |
+| Vector nearest 10k x 384, `Float32` storage | 3.619 ms | 1.419 ms | n/a | n/a | n/a |
+| Hybrid keyword + vector 10k x 384 | 6.648 ms | 2.386 ms | 7.963 ms | 3.361 ms | 9.822 ms |
+| Hybrid keyword + vector 10k x 384, `Float32` storage | 4.317 ms | 2.345 ms | n/a | n/a | n/a |
 
 Full methodology and historical runs live in [Benchmark Results](docs/benchmarks/results.md). Each publishable run should include raw output plus metadata for the Koma revision, Swift toolchain, platform, and command.
 

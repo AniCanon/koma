@@ -28,6 +28,7 @@ Koma treats benchmark results as versioned release artifacts. A published result
 - `koma.sqlite.nearestQuantized.10k.dim384`: int8 sidecar pre-filter plus exact rerank over the same corpus.
 - `koma.sqlite.hybridSearch.10k.dim384`: reciprocal-rank fusion over FTS5 keyword recall and exact vector recall.
 - `koma.sqlite.hybridSearchQuantized.10k.dim384`: reciprocal-rank fusion over FTS5 keyword recall and quantized vector recall.
+- `koma.sqlite.nearestF32.10k.dim384`, `koma.sqlite.nearestQuantizedF32.10k.dim384`, `koma.sqlite.hybridSearchF32.10k.dim384`, and `koma.sqlite.hybridSearchQuantizedF32.10k.dim384`: the same store paths with embeddings stored as `Float32`, halving scan and rerank I/O.
 - `rawsqlite.fullTextSearch.10k`, `rawsqlite.nearest.10k.dim384`, `rawsqlite.nearestQuantized.10k.dim384`, `rawsqlite.hybridSearch.10k.dim384`, and `rawsqlite.hybridSearchQuantized.10k.dim384`: hand-written SQLite baselines for the same search workloads.
 - `grdb.sqlite.fullTextSearch.10k`, `grdb.sqlite.nearest.10k.dim384`, and `grdb.sqlite.hybridSearch.10k.dim384`: GRDB peer baselines for the same search workloads.
 - `koma.vector.cosineScan.10k.dim384`, `koma.vector.encode.1k.dim384`, `koma.vector.decode.1k.dim384`, and `koma.fusion.rrf.2x1k`: in-memory vector and ranking-fusion primitives used to interpret the store-level search numbers.

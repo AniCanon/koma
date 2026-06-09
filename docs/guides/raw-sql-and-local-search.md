@@ -74,7 +74,13 @@ let record = MemoryRecord(
 )
 ```
 
-Exact search scans the stored `Float64` vectors, scores cosine similarity, and hydrates only the winners:
+When the embedding source is single-precision (most are), store at `Float32` for half the storage and scan I/O:
+
+```swift
+embedding: KomaVector.encode(queryEmbedding, as: .float32)
+```
+
+Exact search scans the stored vectors, scores cosine similarity, and hydrates only the winners. The scan detects `Float64` vs `Float32` per row from the blob length, so no search call site changes with the storage precision:
 
 ```swift
 let nearest = try await store.nearest(
@@ -93,6 +99,12 @@ For larger local corpora, create a trigger-maintained int8 sidecar index:
 
 ```swift
 try await store.createQuantizedVectorIndex(for: MemoryRecord.self, on: \.embedding)
+```
+
+If the column stores `Float32` vectors, say so when creating the index — the quantizing SQL function cannot infer the element width from the blob alone:
+
+```swift
+try await store.createQuantizedVectorIndex(for: MemoryRecord.self, on: \.embedding, precision: .float32)
 ```
 
 Use quantized search for faster recall followed by exact reranking:
