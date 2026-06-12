@@ -52,38 +52,67 @@ actor KomaRefreshScheduler {
     func refreshDueRegistrations(now: Date = Date()) async throws -> [KomaRefreshResult] {
         try await store.ensureSchema(for: KomaRefreshRegistrationRecord.self)
         let registrations = try await registrations()
-        var results: [KomaRefreshResult] = []
+        var results: [KomaRefreshResult?] = Array(repeating: nil, count: registrations.count)
+        var due: [(index: Int, registration: KomaRefreshRegistrationRecord, handler: @Sendable () async throws -> Void)] = []
 
-        for registration in registrations {
+        for (index, registration) in registrations.enumerated() {
             guard registration.expiresAt.map({ $0 > now }) ?? true else {
                 try await removeRegistration(id: registration.id)
-                results.append(.skipped(registration.id, .expired))
+                results[index] = .skipped(registration.id, .expired)
                 continue
             }
             guard registration.isDue(now: now) else {
-                results.append(.skipped(registration.id, .notDue))
+                results[index] = .skipped(registration.id, .notDue)
                 continue
             }
             guard let handler = handlers[registration.id] else {
-                results.append(.skipped(registration.id, .missingHandler))
+                results[index] = .skipped(registration.id, .missingHandler)
                 continue
             }
+            due.append((index, registration, handler))
+        }
 
-            var updated = registration
-            updated.lastAttemptAt = now
-            do {
-                try await handler()
-                updated.lastSuccessAt = now
-                updated.lastError = nil
-                try await store.upsert([updated])
-                results.append(.refreshed(registration.id))
-            } catch {
-                updated.lastError = String(describing: error)
-                try await store.upsert([updated])
-                results.append(.failed(registration.id, updated.lastError ?? "unknown"))
+        // Due refreshes are independent network round-trips; running them serially can blow a
+        // background-task time budget with even a handful of registrations. Fan out with
+        // bounded width — store writes still serialize on the store itself. Handler errors
+        // fold into a `.failed` result; a failure to persist the status record propagates.
+        let store = self.store
+        try await withThrowingTaskGroup(of: (Int, KomaRefreshResult).self) { group in
+            let width = 4
+            var nextDue = 0
+
+            func addNextRefresh() {
+                guard nextDue < due.count else {
+                    return
+                }
+                let item = due[nextDue]
+                nextDue += 1
+                group.addTask {
+                    var updated = item.registration
+                    updated.lastAttemptAt = now
+                    do {
+                        try await item.handler()
+                        updated.lastSuccessAt = now
+                        updated.lastError = nil
+                        try await store.upsert([updated])
+                        return (item.index, .refreshed(item.registration.id))
+                    } catch {
+                        updated.lastError = String(describing: error)
+                        try await store.upsert([updated])
+                        return (item.index, .failed(item.registration.id, updated.lastError ?? "unknown"))
+                    }
+                }
+            }
+
+            for _ in 0 ..< width {
+                addNextRefresh()
+            }
+            while let (index, result) = try await group.next() {
+                results[index] = result
+                addNextRefresh()
             }
         }
 
-        return results
+        return results.compactMap(\.self)
     }
 }
