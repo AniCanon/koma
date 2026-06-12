@@ -28,6 +28,10 @@ let snapshot = try await ProjectResources.client(in: koma)
 
 For `GET` operations, a single associated parameter struct is encoded as query items. Path placeholders bind to matching associated-value labels.
 
+## Conditional Requests
+
+When a server returns `ETag` or `Last-Modified` headers, Koma stores the validator per concrete GET and revalidates with `If-None-Match` / `If-Modified-Since` on later refreshes. A `304 Not Modified` skips the response download, the decode, and the upsert; the snapshot is served from the local store, which the server just confirmed is current. This is automatic; opt out per client with `conditionalRequests: .disabled`. Validators clear together with refresh registrations on `clearRefreshRegistrations`.
+
 ## Observation
 
 Resource observations are local-store driven. They emit a local snapshot first so a screen can render cached data immediately, then refresh the endpoint and emit again from the store when the refreshed records are persisted.

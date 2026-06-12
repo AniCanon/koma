@@ -2,7 +2,7 @@
 
 Koma's SQLite store is meant to be a small typed ORM that stays close to raw SQLite performance on app workloads. It is not a claim that the ORM replaces hand-written SQL everywhere.
 
-When an app needs a query shape beyond the typed builder, use the raw SQL escape hatch. When an app needs local memory search, use the FTS5 and vector APIs so Koma can keep indexes on the same SQLite actor and still hydrate typed records.
+When an app needs a query shape beyond the typed builder, use the raw SQL escape hatch. When an app needs local memory search, use the FTS5 and vector APIs so Koma can keep indexes in the same store and still hydrate typed records. Read-only raw queries and searches run on pooled read connections, so they do not queue behind writes; raw writes still serialize on the writer.
 
 ## Raw SQL
 

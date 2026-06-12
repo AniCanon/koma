@@ -61,6 +61,16 @@ let store = try await SQLiteKomaStore.open(
 )
 ```
 
+### Concurrency and Durability
+
+File-backed stores serve reads from a small pool of read-only WAL connections. Reads outside a transaction see the last committed state and never wait for in-flight writes or open transactions; reads inside `store.transaction { ... }` stay on the writer connection and see its uncommitted writes. In-memory stores keep everything on the writer.
+
+The store opens with `PRAGMA synchronous = NORMAL`, which moves durability to WAL checkpoints — a power loss can drop the most recent commits but never corrupts the database. Apps that need per-commit durability can opt back in:
+
+```swift
+try await store.rawExecute("PRAGMA synchronous = FULL")
+```
+
 ## Write Data
 
 ```swift
