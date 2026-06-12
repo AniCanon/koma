@@ -116,6 +116,14 @@ public struct KomaJSONText {
         escapedStringValue = stringValue
     }
 
+    /// True when the text is a view into the scanner's input buffer, which stays alive for the
+    /// whole decode call — consumers may then hand the bytes to APIs that read them lazily
+    /// within that scope (e.g. SQLITE_STATIC binds). False for escape-materialized strings,
+    /// whose storage is only pinned inside `withUnsafeUTF8`.
+    public var isBufferBacked: Bool {
+        buffer != nil
+    }
+
     public func withUnsafeUTF8<Result>(
         _ body: (UnsafeBufferPointer<UInt8>) throws -> Result
     ) rethrows -> Result {
