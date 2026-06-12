@@ -157,19 +157,37 @@ public extension SQLiteKomaStore {
     ///
     /// The scan reads only `rowid` and the embedding blob, scoring each row straight from SQLite's
     /// bytes (no copy, no per-row allocation); only the top `limit` rows are hydrated into records.
+    ///
+    /// Pass `assumeNormalized: true` when the stored vectors and the query are L2-normalized
+    /// (most embedding models emit normalized vectors): cosine reduces to the dot product and
+    /// the scan skips per-row norm accumulation — roughly half the arithmetic.
     nonisolated func nearest<Record: KomaSQLiteFastPathRecord>(
         _ type: Record.Type,
         to vector: [Double],
         on keyPath: KeyPath<Record.Columns, KomaColumn<Data>>,
-        limit: Int
+        limit: Int,
+        assumeNormalized: Bool = false
     ) async throws -> [(record: Record, similarity: Double)] {
         let column = Record.columns[keyPath: keyPath].name
         if let readPool, SQLiteKomaTransactionContext.id == nil {
             return try await readPool.withConnection { access in
-                try Self.nearestRecords(type, to: vector, column: column, limit: limit, access: access)
+                try Self.nearestRecords(
+                    type,
+                    to: vector,
+                    column: column,
+                    limit: limit,
+                    assumeNormalized: assumeNormalized,
+                    access: access
+                )
             }
         }
-        return try await nearestOnWriter(type, to: vector, column: column, limit: limit)
+        return try await nearestOnWriter(
+            type,
+            to: vector,
+            column: column,
+            limit: limit,
+            assumeNormalized: assumeNormalized
+        )
     }
 
     /// Creates an int8 quantized sidecar index for a vector column stored at `precision`.
@@ -233,7 +251,8 @@ public extension SQLiteKomaStore {
         to vector: [Double],
         on keyPath: KeyPath<Record.Columns, KomaColumn<Data>>,
         limit: Int,
-        overfetch: Int = 10
+        overfetch: Int = 10,
+        assumeNormalized: Bool = false
     ) async throws -> [(record: Record, similarity: Double)] {
         let column = Record.columns[keyPath: keyPath].name
         if let readPool, SQLiteKomaTransactionContext.id == nil {
@@ -244,11 +263,19 @@ public extension SQLiteKomaStore {
                     column: column,
                     limit: limit,
                     overfetch: overfetch,
+                    assumeNormalized: assumeNormalized,
                     access: access
                 )
             }
         }
-        return try await nearestQuantizedOnWriter(type, to: vector, column: column, limit: limit, overfetch: overfetch)
+        return try await nearestQuantizedOnWriter(
+            type,
+            to: vector,
+            column: column,
+            limit: limit,
+            overfetch: overfetch,
+            assumeNormalized: assumeNormalized
+        )
     }
 
     /// Hybrid search: fuses FTS5 keyword recall with vector recall via Reciprocal Rank Fusion,
@@ -267,7 +294,8 @@ public extension SQLiteKomaStore {
         limit: Int = 20,
         candidateLimit: Int = 50,
         k: Int = 60,
-        vectorSearch: KomaVectorSearchMode = .exact
+        vectorSearch: KomaVectorSearchMode = .exact,
+        assumeNormalized: Bool = false
     ) async throws -> [Record] {
         let column = Record.columns[keyPath: vectorKeyPath].name
 
@@ -278,8 +306,14 @@ public extension SQLiteKomaStore {
             async let semanticRecall = readPool.withConnection { access -> [Record] in
                 switch vectorSearch {
                 case .exact:
-                    try Self.nearestRecords(type, to: vector, column: column, limit: candidateLimit, access: access)
-                        .map(\.record)
+                    try Self.nearestRecords(
+                        type,
+                        to: vector,
+                        column: column,
+                        limit: candidateLimit,
+                        assumeNormalized: assumeNormalized,
+                        access: access
+                    ).map(\.record)
                 case let .quantized(overfetch):
                     try Self.nearestQuantizedRecords(
                         type,
@@ -287,6 +321,7 @@ public extension SQLiteKomaStore {
                         column: column,
                         limit: candidateLimit,
                         overfetch: overfetch,
+                        assumeNormalized: assumeNormalized,
                         access: access
                     ).map(\.record)
                 }
@@ -302,7 +337,8 @@ public extension SQLiteKomaStore {
             near: vector,
             column: column,
             candidateLimit: candidateLimit,
-            vectorSearch: vectorSearch
+            vectorSearch: vectorSearch,
+            assumeNormalized: assumeNormalized
         )
         let fused = KomaVector.fuse([keyword, semantic], by: idKeyPath, k: k)
         return Array(fused.prefix(limit))
@@ -314,10 +350,18 @@ extension SQLiteKomaStore {
         _ type: Record.Type,
         to vector: [Double],
         column: String,
-        limit: Int
+        limit: Int,
+        assumeNormalized: Bool
     ) async throws -> [(record: Record, similarity: Double)] {
         await waitForTransactionAccess()
-        return try Self.nearestRecords(type, to: vector, column: column, limit: limit, access: writerAccess)
+        return try Self.nearestRecords(
+            type,
+            to: vector,
+            column: column,
+            limit: limit,
+            assumeNormalized: assumeNormalized,
+            access: writerAccess
+        )
     }
 
     func nearestQuantizedOnWriter<Record: KomaSQLiteFastPathRecord>(
@@ -325,7 +369,8 @@ extension SQLiteKomaStore {
         to vector: [Double],
         column: String,
         limit: Int,
-        overfetch: Int
+        overfetch: Int,
+        assumeNormalized: Bool
     ) async throws -> [(record: Record, similarity: Double)] {
         await waitForTransactionAccess()
         return try Self.nearestQuantizedRecords(
@@ -334,6 +379,7 @@ extension SQLiteKomaStore {
             column: column,
             limit: limit,
             overfetch: overfetch,
+            assumeNormalized: assumeNormalized,
             access: writerAccess
         )
     }
@@ -344,7 +390,8 @@ extension SQLiteKomaStore {
         near vector: [Double],
         column: String,
         candidateLimit: Int,
-        vectorSearch: KomaVectorSearchMode
+        vectorSearch: KomaVectorSearchMode,
+        assumeNormalized: Bool
     ) async throws -> (keyword: [Record], semantic: [Record]) {
         await waitForTransactionAccess()
 
@@ -352,8 +399,14 @@ extension SQLiteKomaStore {
         let keyword = try Self.fullTextRecords(type, matching: query, limit: candidateLimit, access: access)
         let semantic: [Record] = switch vectorSearch {
         case .exact:
-            try Self.nearestRecords(type, to: vector, column: column, limit: candidateLimit, access: access)
-                .map(\.record)
+            try Self.nearestRecords(
+                type,
+                to: vector,
+                column: column,
+                limit: candidateLimit,
+                assumeNormalized: assumeNormalized,
+                access: access
+            ).map(\.record)
         case let .quantized(overfetch):
             try Self.nearestQuantizedRecords(
                 type,
@@ -361,6 +414,7 @@ extension SQLiteKomaStore {
                 column: column,
                 limit: candidateLimit,
                 overfetch: overfetch,
+                assumeNormalized: assumeNormalized,
                 access: access
             ).map(\.record)
         }
@@ -372,6 +426,7 @@ extension SQLiteKomaStore {
         to vector: [Double],
         column columnName: String,
         limit: Int,
+        assumeNormalized: Bool = false,
         access: SQLiteDatabaseAccess
     ) throws -> [(record: Record, similarity: Double)] {
         guard limit > 0 else { return [] }
@@ -384,6 +439,7 @@ extension SQLiteKomaStore {
             column: Self.quote(columnName),
             to: vector,
             limit: limit,
+            assumeNormalized: assumeNormalized,
             access: access
         )
         guard !winners.isEmpty else { return [] }
@@ -412,6 +468,7 @@ extension SQLiteKomaStore {
         column columnName: String,
         limit: Int,
         overfetch: Int,
+        assumeNormalized: Bool = false,
         access: SQLiteDatabaseAccess
     ) throws -> [(record: Record, similarity: Double)] {
         guard limit > 0, overfetch > 0 else { return [] }
@@ -426,6 +483,7 @@ extension SQLiteKomaStore {
             to: vector,
             limit: limit,
             overfetch: overfetch,
+            assumeNormalized: assumeNormalized,
             access: access
         )
         guard !winners.isEmpty else { return [] }
@@ -456,6 +514,7 @@ extension SQLiteKomaStore {
         column: String,
         to query: [Double],
         limit: Int,
+        assumeNormalized: Bool = false,
         access: SQLiteDatabaseAccess
     ) throws -> [(rowid: Int64, similarity: Double)] {
         let float64Bytes = query.count * MemoryLayout<Double>.stride
@@ -471,20 +530,24 @@ extension SQLiteKomaStore {
                     switch sqlite3_step(statement) {
                     case SQLITE_ROW:
                         guard let bytes = sqlite3_column_blob(statement, 1) else { continue }
-                        let scored: (dot: Double, norm: Double)
-                        switch Int(sqlite3_column_bytes(statement, 1)) {
-                        case float64Bytes:
-                            scored = Self.dotAndNorm(queryBuffer, float64: bytes)
-                        case float32Bytes:
-                            scored = Self.dotAndNorm(queryBuffer, float32: bytes)
+                        let similarity: Double
+                        switch (Int(sqlite3_column_bytes(statement, 1)), assumeNormalized) {
+                        case (float64Bytes, true):
+                            similarity = Self.dot(queryBuffer, float64: bytes)
+                        case (float32Bytes, true):
+                            similarity = Self.dot(queryBuffer, float32: bytes)
+                        case (float64Bytes, false):
+                            let scored = Self.dotAndNorm(queryBuffer, float64: bytes)
+                            let magnitude = queryNorm * scored.norm.squareRoot()
+                            similarity = magnitude == 0 ? 0 : scored.dot / magnitude
+                        case (float32Bytes, false):
+                            let scored = Self.dotAndNorm(queryBuffer, float32: bytes)
+                            let magnitude = queryNorm * scored.norm.squareRoot()
+                            similarity = magnitude == 0 ? 0 : scored.dot / magnitude
                         default:
                             continue // skip rows whose vector is absent or a different dimension
                         }
-                        let magnitude = queryNorm * scored.norm.squareRoot()
-                        top.insert(
-                            magnitude == 0 ? 0 : scored.dot / magnitude,
-                            rowid: sqlite3_column_int64(statement, 0)
-                        )
+                        top.insert(similarity, rowid: sqlite3_column_int64(statement, 0))
                     case SQLITE_DONE:
                         return top.sortedDescending().map { (rowid: $0.rowid, similarity: $0.score) }
                     default:
@@ -503,6 +566,7 @@ extension SQLiteKomaStore {
         to query: [Double],
         limit: Int,
         overfetch: Int,
+        assumeNormalized: Bool = false,
         access: SQLiteDatabaseAccess
     ) throws -> [(rowid: Int64, similarity: Double)] {
         let queryCode = KomaVector.encodeInt8(query)
@@ -549,20 +613,24 @@ extension SQLiteKomaStore {
                     switch sqlite3_step(statement) {
                     case SQLITE_ROW:
                         guard let bytes = sqlite3_column_blob(statement, 1) else { continue }
-                        let scored: (dot: Double, norm: Double)
-                        switch Int(sqlite3_column_bytes(statement, 1)) {
-                        case float64Bytes:
-                            scored = Self.dotAndNorm(queryBuffer, float64: bytes)
-                        case float32Bytes:
-                            scored = Self.dotAndNorm(queryBuffer, float32: bytes)
+                        let similarity: Double
+                        switch (Int(sqlite3_column_bytes(statement, 1)), assumeNormalized) {
+                        case (float64Bytes, true):
+                            similarity = Self.dot(queryBuffer, float64: bytes)
+                        case (float32Bytes, true):
+                            similarity = Self.dot(queryBuffer, float32: bytes)
+                        case (float64Bytes, false):
+                            let scored = Self.dotAndNorm(queryBuffer, float64: bytes)
+                            let magnitude = queryNorm * scored.norm.squareRoot()
+                            similarity = magnitude == 0 ? 0 : scored.dot / magnitude
+                        case (float32Bytes, false):
+                            let scored = Self.dotAndNorm(queryBuffer, float32: bytes)
+                            let magnitude = queryNorm * scored.norm.squareRoot()
+                            similarity = magnitude == 0 ? 0 : scored.dot / magnitude
                         default:
                             continue
                         }
-                        let magnitude = queryNorm * scored.norm.squareRoot()
-                        top.insert(
-                            magnitude == 0 ? 0 : scored.dot / magnitude,
-                            rowid: sqlite3_column_int64(statement, 0)
-                        )
+                        top.insert(similarity, rowid: sqlite3_column_int64(statement, 0))
                     case SQLITE_DONE:
                         return top.sortedDescending().map { (rowid: $0.rowid, similarity: $0.score) }
                     default:
@@ -646,6 +714,53 @@ extension SQLiteKomaStore {
             index += 1
         }
         return ((dot0 + dot1) + (dot2 + dot3), (norm0 + norm1) + (norm2 + norm3))
+    }
+
+    /// Dot product only — the `assumeNormalized` kernel, where cosine reduces to the dot and the
+    /// row's norm never needs accumulating. Same unrolled four-accumulator shape as `dotAndNorm`.
+    private static func dot(
+        _ query: UnsafeBufferPointer<Double>,
+        float64 bytes: UnsafeRawPointer
+    ) -> Double {
+        let stride = MemoryLayout<Double>.stride
+        let count = query.count
+        var dot0 = 0.0, dot1 = 0.0, dot2 = 0.0, dot3 = 0.0
+        var index = 0
+        while index + 4 <= count {
+            dot0 += query[index] * bytes.loadUnaligned(fromByteOffset: index * stride, as: Double.self)
+            dot1 += query[index + 1] * bytes.loadUnaligned(fromByteOffset: (index + 1) * stride, as: Double.self)
+            dot2 += query[index + 2] * bytes.loadUnaligned(fromByteOffset: (index + 2) * stride, as: Double.self)
+            dot3 += query[index + 3] * bytes.loadUnaligned(fromByteOffset: (index + 3) * stride, as: Double.self)
+            index += 4
+        }
+        while index < count {
+            dot0 += query[index] * bytes.loadUnaligned(fromByteOffset: index * stride, as: Double.self)
+            index += 1
+        }
+        return (dot0 + dot1) + (dot2 + dot3)
+    }
+
+    /// `Float32` variant of `dot(_:float64:)`.
+    private static func dot(
+        _ query: UnsafeBufferPointer<Double>,
+        float32 bytes: UnsafeRawPointer
+    ) -> Double {
+        let stride = MemoryLayout<Float>.stride
+        let count = query.count
+        var dot0 = 0.0, dot1 = 0.0, dot2 = 0.0, dot3 = 0.0
+        var index = 0
+        while index + 4 <= count {
+            dot0 += query[index] * Double(bytes.loadUnaligned(fromByteOffset: index * stride, as: Float.self))
+            dot1 += query[index + 1] * Double(bytes.loadUnaligned(fromByteOffset: (index + 1) * stride, as: Float.self))
+            dot2 += query[index + 2] * Double(bytes.loadUnaligned(fromByteOffset: (index + 2) * stride, as: Float.self))
+            dot3 += query[index + 3] * Double(bytes.loadUnaligned(fromByteOffset: (index + 3) * stride, as: Float.self))
+            index += 4
+        }
+        while index < count {
+            dot0 += query[index] * Double(bytes.loadUnaligned(fromByteOffset: index * stride, as: Float.self))
+            index += 1
+        }
+        return (dot0 + dot1) + (dot2 + dot3)
     }
 
     /// Integer dot of the query's int8 code against a row's code. Accumulates in `Int32` with
