@@ -39,6 +39,8 @@ let results = try await koma.refreshDueRegistrations()
 
 iOS and Android should schedule wakeups with their native schedulers. Koma owns the request registry and refresh execution; the app owns platform scheduling.
 
+Due refreshes run concurrently (up to four at a time) rather than as sequential round-trips, so a handful of registrations fits comfortably inside a background-task time budget. Results come back in registration order. Handlers are already required to be `Sendable`; do not assume one finishes before the next starts. When a server returns `ETag` or `Last-Modified` headers, refreshes revalidate conditionally and a `304 Not Modified` skips the download and the local write entirely — see [Conditional Requests](rest-resources.md#conditional-requests).
+
 Use:
 
 ```swift

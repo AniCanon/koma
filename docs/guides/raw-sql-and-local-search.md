@@ -33,7 +33,7 @@ try await store.rawExecute(
 )
 ```
 
-Raw SQL calls still run through the SQLite store's transaction gate. A raw write from another task waits for an active transaction instead of interleaving with it.
+Raw writes still run through the SQLite store's transaction gate: a raw write from another task waits for an active transaction instead of interleaving with it. Raw reads do not wait — they run on pooled read connections and see the last committed state; only reads issued inside `store.transaction { ... }` run on the writer and observe its uncommitted writes.
 
 ## Full-Text Search
 
