@@ -20,11 +20,17 @@ extension SQLiteKomaStore {
             throw SQLiteKomaError.closed
         }
 
-        var statement: OpaquePointer?
-        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK, let statement else {
-            throw SQLiteKomaError.executionFailed(String(cString: sqlite3_errmsg(db)))
+        let statement: OpaquePointer
+        if let cached = statementCache.checkout(sql) {
+            statement = cached
+        } else {
+            var prepared: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &prepared, nil) == SQLITE_OK, let prepared else {
+                throw SQLiteKomaError.executionFailed(String(cString: sqlite3_errmsg(db)))
+            }
+            statement = prepared
         }
-        defer { sqlite3_finalize(statement) }
+        defer { statementCache.checkin(sql, statement) }
 
         return try body(statement)
     }

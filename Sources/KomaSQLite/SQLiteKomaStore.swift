@@ -4,6 +4,7 @@ import Koma
 
 public actor SQLiteKomaStore: KomaStore {
     var connection: SQLiteConnection
+    let statementCache = SQLiteStatementCache()
     let path: String
     var encoder: JSONEncoder?
     let decoder: JSONDecoder?
@@ -81,8 +82,10 @@ public actor SQLiteKomaStore: KomaStore {
     }
 
     deinit {
+        // close_v2 defers the close until the statement cache's own deinit finalizes the
+        // cached statements (actor deinit cannot touch the non-Sendable cache directly).
         if let db = self.connection.rawValue {
-            sqlite3_close(db)
+            sqlite3_close_v2(db)
         }
     }
 
