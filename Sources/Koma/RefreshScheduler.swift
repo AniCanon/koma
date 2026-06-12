@@ -47,6 +47,9 @@ actor KomaRefreshScheduler {
             try await store.delete(KomaRefreshRegistrationRecord.self)
                 .execute()
         }
+        // Validators carry no credentials, but they are per-backend state; drop them whenever
+        // registrations reset (logout, tenant switch) so revalidation starts clean.
+        try await store.delete(KomaHTTPValidatorRecord.self).execute()
     }
 
     func refreshDueRegistrations(now: Date = Date()) async throws -> [KomaRefreshResult] {

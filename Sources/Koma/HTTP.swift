@@ -54,6 +54,14 @@ public struct KomaResponse: Sendable {
         self.headerFields = headerFields
         self.body = body
     }
+
+    /// Case-insensitive single-header lookup that avoids materializing the full dictionary.
+    public func headerValue(_ name: String) -> String? {
+        for (key, value) in headerFields where key.caseInsensitiveCompare(name) == .orderedSame {
+            return value
+        }
+        return nil
+    }
 }
 
 public struct KomaRequestContext: Sendable {
