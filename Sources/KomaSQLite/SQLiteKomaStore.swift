@@ -8,9 +8,15 @@ public actor SQLiteKomaStore: KomaStore {
     let path: String
     var encoder: JSONEncoder?
     let decoder: JSONDecoder?
+    /// Mirrors `decoder != nil` as a Sendable flag so nonisolated read routing can consult it
+    /// without depending on JSONDecoder's sendability on every platform.
+    let usesCustomDecoder: Bool
     let usesSQLiteFastPath: Bool
     var canUseFreshSchemaCreation: Bool
-    var ensuredTables: Set<String> = []
+    let ensuredTables = SQLiteEnsuredTables()
+    /// Read-only WAL connections that serve reads concurrently with this actor's writes.
+    /// nil for in-memory databases, where separate connections would see separate stores.
+    let readPool: SQLiteReadPool?
     var activeTransactionID: UUID?
     var transactionWaiters: [CheckedContinuation<Void, Never>] = []
     var observations: [UUID: SQLiteKomaStoreObservation] = [:]
@@ -51,21 +57,27 @@ public actor SQLiteKomaStore: KomaStore {
         self.path = path
         self.encoder = encoder
         self.decoder = decoder
+        usesCustomDecoder = decoder != nil
         self.usesSQLiteFastPath = usesSQLiteFastPath
         canUseFreshSchemaCreation = Self.isKnownFreshDatabase(path)
 
         // SQLite access is serialized by this actor, so per-connection SQLite mutexes are redundant here.
         let flags = SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_NOMUTEX
-        var connection: OpaquePointer?
-        guard sqlite3_open_v2(path, &connection, flags, nil) == SQLITE_OK else {
-            let message = connection.flatMap { sqlite3_errmsg($0) }.map { String(cString: $0) } ?? "Unable to open SQLite database."
-            if let connection {
-                sqlite3_close(connection)
+        var openedConnection: OpaquePointer?
+        guard sqlite3_open_v2(path, &openedConnection, flags, nil) == SQLITE_OK, let connection = openedConnection else {
+            let message = openedConnection.flatMap { sqlite3_errmsg($0) }.map { String(cString: $0) } ?? "Unable to open SQLite database."
+            if let openedConnection {
+                sqlite3_close(openedConnection)
             }
             throw SQLiteKomaError.openFailed(message)
         }
         self.connection = SQLiteConnection(rawValue: connection)
-        try installVectorFunctions()
+        // Readers open lazily on first use, so the pool costs nothing at startup.
+        readPool = path == ":memory:" ? nil : SQLiteReadPool(
+            path: path,
+            capacity: min(4, max(2, ProcessInfo.processInfo.activeProcessorCount / 2))
+        )
+        try Self.installVectorFunctions(on: connection)
         try execute("PRAGMA journal_mode = WAL")
         // NORMAL skips the per-commit WAL fsync (durability moves to checkpoints); on device
         // flash this is the difference between microsecond and millisecond single-row commits.

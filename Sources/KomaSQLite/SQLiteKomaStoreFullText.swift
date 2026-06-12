@@ -53,21 +53,35 @@ public extension SQLiteKomaStore {
     /// ranked by relevance (bm25), best first.
     ///
     /// `query` is an FTS5 MATCH expression (e.g. `"vector OR embeddings"`, `"semantic search"`).
-    func fullTextSearch<Record: KomaSQLiteFastPathRecord>(
+    nonisolated func fullTextSearch<Record: KomaSQLiteFastPathRecord>(
         _ type: Record.Type,
         matching query: String,
         limit: Int? = nil
     ) async throws -> [Record] {
-        await waitForTransactionAccess()
-        return try fullTextRecords(type, matching: query, limit: limit)
+        if let readPool, SQLiteKomaTransactionContext.id == nil {
+            return try await readPool.withConnection { access in
+                try Self.fullTextRecords(type, matching: query, limit: limit, access: access)
+            }
+        }
+        return try await fullTextSearchOnWriter(type, matching: query, limit: limit)
     }
 }
 
 extension SQLiteKomaStore {
-    func fullTextRecords<Record: KomaSQLiteFastPathRecord>(
+    func fullTextSearchOnWriter<Record: KomaSQLiteFastPathRecord>(
         _ type: Record.Type,
         matching query: String,
-        limit: Int? = nil
+        limit: Int?
+    ) async throws -> [Record] {
+        await waitForTransactionAccess()
+        return try Self.fullTextRecords(type, matching: query, limit: limit, access: writerAccess)
+    }
+
+    static func fullTextRecords<Record: KomaSQLiteFastPathRecord>(
+        _ type: Record.Type,
+        matching query: String,
+        limit: Int? = nil,
+        access: SQLiteDatabaseAccess
     ) throws -> [Record] {
         let qFTS = Self.quote("\(Record.komaTableName)_fts")
         let columns = Self.quotedSelectColumnList(Record.komaColumns, qualifier: "base")
@@ -85,6 +99,6 @@ extension SQLiteKomaStore {
             arguments.append(.integer(Int64(limit)))
         }
 
-        return try rawRecords(Record.self, sql, arguments: arguments)
+        return try rawRecords(Record.self, sql, arguments: arguments, access: access)
     }
 }

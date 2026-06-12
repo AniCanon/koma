@@ -1,6 +1,30 @@
 import CKomaSQLite
 import Foundation
 
+/// One connection plus its statement cache — the unit both the writer actor and checked-out
+/// pool readers execute SQL against. Not Sendable by design: it is confined to whichever
+/// executor owns the underlying connection for the duration of the call.
+struct SQLiteDatabaseAccess {
+    let database: OpaquePointer
+    let statementCache: SQLiteStatementCache
+
+    func withStatement<Result>(_ sql: String, _ body: (OpaquePointer) throws -> Result) throws -> Result {
+        let statement: OpaquePointer
+        if let cached = statementCache.checkout(sql) {
+            statement = cached
+        } else {
+            var prepared: OpaquePointer?
+            guard sqlite3_prepare_v2(database, sql, -1, &prepared, nil) == SQLITE_OK, let prepared else {
+                throw SQLiteKomaError.executionFailed(String(cString: sqlite3_errmsg(database)))
+            }
+            statement = prepared
+        }
+        defer { statementCache.checkin(sql, statement) }
+
+        return try body(statement)
+    }
+}
+
 extension SQLiteKomaStore {
     func execute(_ sql: String) throws {
         guard let db = connection.rawValue else {
@@ -15,24 +39,18 @@ extension SQLiteKomaStore {
         }
     }
 
-    func withStatement<Result>(_ sql: String, _ body: (OpaquePointer) throws -> Result) throws -> Result {
-        guard let db = connection.rawValue else {
-            throw SQLiteKomaError.closed
-        }
-
-        let statement: OpaquePointer
-        if let cached = statementCache.checkout(sql) {
-            statement = cached
-        } else {
-            var prepared: OpaquePointer?
-            guard sqlite3_prepare_v2(db, sql, -1, &prepared, nil) == SQLITE_OK, let prepared else {
-                throw SQLiteKomaError.executionFailed(String(cString: sqlite3_errmsg(db)))
+    /// The writer connection's access. Actor-isolated; pooled reads use their own connection.
+    var writerAccess: SQLiteDatabaseAccess {
+        get throws {
+            guard let db = connection.rawValue else {
+                throw SQLiteKomaError.closed
             }
-            statement = prepared
+            return SQLiteDatabaseAccess(database: db, statementCache: statementCache)
         }
-        defer { statementCache.checkin(sql, statement) }
+    }
 
-        return try body(statement)
+    func withStatement<Result>(_ sql: String, _ body: (OpaquePointer) throws -> Result) throws -> Result {
+        try writerAccess.withStatement(sql, body)
     }
 
     func object(from record: some Encodable) throws -> [String: Any] {

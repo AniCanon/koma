@@ -4,22 +4,30 @@ import Koma
 
 public extension SQLiteKomaStore {
     /// Runs an arbitrary `SELECT` with positional (`?`) arguments and returns the result rows.
-    func rawQuery(_ sql: String, arguments: [KomaSQLiteStorageValue] = []) async throws -> [KomaRawRow] {
-        await waitForTransactionAccess()
-        return try rawRows(sql, arguments: arguments)
+    nonisolated func rawQuery(_ sql: String, arguments: [KomaSQLiteStorageValue] = []) async throws -> [KomaRawRow] {
+        if let readPool, SQLiteKomaTransactionContext.id == nil {
+            return try await readPool.withConnection { access in
+                try Self.rawRows(sql, arguments: arguments, access: access)
+            }
+        }
+        return try await rawQueryOnWriter(sql, arguments: arguments)
     }
 
     /// Runs an arbitrary `SELECT` and decodes each row into `Record`.
     ///
     /// The selected columns must be in the record's declared column order (its `komaColumns`);
     /// `SELECT <explicit columns>` or `SELECT t.*` from the record's own table both satisfy this.
-    func rawQuery<Record: KomaSQLiteFastPathRecord>(
+    nonisolated func rawQuery<Record: KomaSQLiteFastPathRecord>(
         _ type: Record.Type,
         _ sql: String,
         arguments: [KomaSQLiteStorageValue] = []
     ) async throws -> [Record] {
-        await waitForTransactionAccess()
-        return try rawRecords(type, sql, arguments: arguments)
+        if let readPool, SQLiteKomaTransactionContext.id == nil {
+            return try await readPool.withConnection { access in
+                try Self.rawRecords(type, sql, arguments: arguments, access: access)
+            }
+        }
+        return try await rawQueryOnWriter(type, sql, arguments: arguments)
     }
 
     /// Runs a non-`SELECT` statement (INSERT/UPDATE/DELETE, FTS commands, ...) with positional
@@ -43,8 +51,26 @@ public extension SQLiteKomaStore {
 }
 
 extension SQLiteKomaStore {
-    func rawRows(_ sql: String, arguments: [KomaSQLiteStorageValue] = []) throws -> [KomaRawRow] {
-        try withStatement(sql) { statement in
+    func rawQueryOnWriter(_ sql: String, arguments: [KomaSQLiteStorageValue]) async throws -> [KomaRawRow] {
+        await waitForTransactionAccess()
+        return try Self.rawRows(sql, arguments: arguments, access: writerAccess)
+    }
+
+    func rawQueryOnWriter<Record: KomaSQLiteFastPathRecord>(
+        _ type: Record.Type,
+        _ sql: String,
+        arguments: [KomaSQLiteStorageValue]
+    ) async throws -> [Record] {
+        await waitForTransactionAccess()
+        return try Self.rawRecords(type, sql, arguments: arguments, access: writerAccess)
+    }
+
+    static func rawRows(
+        _ sql: String,
+        arguments: [KomaSQLiteStorageValue] = [],
+        access: SQLiteDatabaseAccess
+    ) throws -> [KomaRawRow] {
+        try access.withStatement(sql) { statement in
             try Self.bind(arguments, to: statement)
             let columnCount = Int(sqlite3_column_count(statement))
 
@@ -70,12 +96,13 @@ extension SQLiteKomaStore {
         }
     }
 
-    func rawRecords<Record: KomaSQLiteFastPathRecord>(
+    static func rawRecords<Record: KomaSQLiteFastPathRecord>(
         _ type: Record.Type,
         _ sql: String,
-        arguments: [KomaSQLiteStorageValue] = []
+        arguments: [KomaSQLiteStorageValue] = [],
+        access: SQLiteDatabaseAccess
     ) throws -> [Record] {
-        try withStatement(sql) { statement in
+        try access.withStatement(sql) { statement in
             try Self.bind(arguments, to: statement)
             // Read columns straight off the statement — the same direct path fetch() uses —
             // instead of boxing every column into a KomaSQLiteRow value array per row.

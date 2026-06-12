@@ -183,7 +183,7 @@ public extension SQLiteKomaStore {
             return value
         } catch {
             try? execute("ROLLBACK")
-            ensuredTables.removeAll(keepingCapacity: true)
+            ensuredTables.removeAll()
             pendingChangedTables.removeAll(keepingCapacity: true)
             endTransactionScope()
             throw error
