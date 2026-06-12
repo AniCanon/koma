@@ -79,7 +79,7 @@ actor KomaRefreshScheduler {
         // background-task time budget with even a handful of registrations. Fan out with
         // bounded width — store writes still serialize on the store itself. Handler errors
         // fold into a `.failed` result; a failure to persist the status record propagates.
-        let store = self.store
+        let store = store
         try await withThrowingTaskGroup(of: (Int, KomaRefreshResult).self) { group in
             let width = 4
             var nextDue = 0

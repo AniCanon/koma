@@ -18,7 +18,7 @@ public extension SQLiteKomaStore {
         return try await fetchOnWriter(request)
     }
 
-    nonisolated func count<Record: KomaEntityRecord>(_ request: KomaQueryRequest<Record>) async throws -> Int {
+    nonisolated func count(_ request: KomaQueryRequest<some KomaEntityRecord>) async throws -> Int {
         if let readPool, SQLiteKomaTransactionContext.id == nil {
             try await ensureSchemaForRead(of: request)
             return try await readPool.withConnection { access in
@@ -63,7 +63,7 @@ extension SQLiteKomaStore {
         )
     }
 
-    func countOnWriter<Record: KomaEntityRecord>(_ request: KomaQueryRequest<Record>) async throws -> Int {
+    func countOnWriter(_ request: KomaQueryRequest<some KomaEntityRecord>) async throws -> Int {
         try await ensureSchemaOnWriter(request)
         return try Self.executeCount(request, access: writerAccess)
     }
@@ -110,10 +110,10 @@ extension SQLiteKomaStore {
             }
 
             if usesDirectRecordPath, let fastRecordType {
-                // Open the fast-path existential once for the whole result set; the row loop
-                // then makes direct witness calls with no per-row metatype call or `as?` cast.
-                // The final array cast is an O(1) identity check because the opened type is
-                // dynamically `Record`.
+                /// Open the fast-path existential once for the whole result set; the row loop
+                /// then makes direct witness calls with no per-row metatype call or `as?` cast.
+                /// The final array cast is an O(1) identity check because the opened type is
+                /// dynamically `Record`.
                 func decodeRows<FastRecord: KomaSQLiteFastPathRecord>(_: FastRecord.Type) throws -> [Record] {
                     var rows: [FastRecord] = []
                     if let limit = request.limit {

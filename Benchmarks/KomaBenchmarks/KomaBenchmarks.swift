@@ -421,7 +421,7 @@ let benchmarks: @Sendable () -> Void = {
         benchmark.startMeasurement()
         for iteration in benchmark.scaledIterations {
             let id = "project-\((iteration &* 2_654_435_761) % 10000)"
-            blackHole(try database.fetchProject(id: id))
+            try blackHole(database.fetchProject(id: id))
         }
         benchmark.stopMeasurement()
     }
