@@ -3,10 +3,6 @@ import Foundation
 import Koma
 
 extension SQLiteKomaStore {
-    static func fastRow(statement: OpaquePointer, columnCount: Int) -> KomaSQLiteRow {
-        KomaSQLiteRow(values: columnValues(statement: statement, columnCount: columnCount))
-    }
-
     static func rowObject(statement: OpaquePointer, columns: [String]) -> [String: Any] {
         var object: [String: Any] = [:]
         object.reserveCapacity(columns.count)

@@ -45,6 +45,35 @@ public extension SQLiteKomaStore {
                 try Self.bind(argument, to: statement, at: Int32(index + 1))
             }
 
+            if usesDirectRecordPath, let fastRecordType {
+                // Open the fast-path existential once for the whole result set; the row loop
+                // then makes direct witness calls with no per-row metatype call or `as?` cast.
+                // The final array cast is an O(1) identity check because the opened type is
+                // dynamically `Record`.
+                func decodeRows<FastRecord: KomaSQLiteFastPathRecord>(_: FastRecord.Type) throws -> [Record] {
+                    var rows: [FastRecord] = []
+                    if let limit = request.limit {
+                        rows.reserveCapacity(limit)
+                    }
+                    let reader = SQLiteStatementRowReader(statement: statement)
+                    while true {
+                        let step = sqlite3_step(statement)
+                        if step == SQLITE_DONE {
+                            break
+                        }
+                        guard step == SQLITE_ROW else {
+                            throw SQLiteKomaError.executionFailed("SQLite fetch failed.")
+                        }
+                        try rows.append(FastRecord.komaSQLiteRecord(from: reader))
+                    }
+                    guard let records = rows as? [Record] else {
+                        throw SQLiteKomaError.executionFailed("SQLite fast path returned an unexpected record type.")
+                    }
+                    return records
+                }
+                return try decodeRows(fastRecordType)
+            }
+
             var records: [Record] = []
             if let limit = request.limit {
                 records.reserveCapacity(limit)
@@ -58,14 +87,7 @@ public extension SQLiteKomaStore {
                 guard step == SQLITE_ROW else {
                     throw SQLiteKomaError.executionFailed("SQLite fetch failed.")
                 }
-                if usesDirectRecordPath {
-                    let row = SQLiteStatementRowReader(statement: statement)
-                    let record = try fastRecordType?.komaSQLiteRecord(from: row) as? Record
-                    guard let record else {
-                        throw SQLiteKomaError.executionFailed("SQLite fast path returned an unexpected record type.")
-                    }
-                    records.append(record)
-                } else if let decoder = self.decoder {
+                if let decoder = self.decoder {
                     let object = Self.rowObject(statement: statement, columns: columns)
                     let data = try JSONSerialization.data(withJSONObject: object)
                     try records.append(decoder.decode(Record.self, from: data))

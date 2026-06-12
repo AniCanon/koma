@@ -77,13 +77,14 @@ extension SQLiteKomaStore {
     ) throws -> [Record] {
         try withStatement(sql) { statement in
             try Self.bind(arguments, to: statement)
-            let columnCount = Int(sqlite3_column_count(statement))
+            // Read columns straight off the statement — the same direct path fetch() uses —
+            // instead of boxing every column into a KomaSQLiteRow value array per row.
+            let reader = SQLiteStatementRowReader(statement: statement)
             var records: [Record] = []
             while true {
                 switch sqlite3_step(statement) {
                 case SQLITE_ROW:
-                    let row = Self.fastRow(statement: statement, columnCount: columnCount)
-                    try records.append(Record.komaSQLiteRecord(from: row))
+                    try records.append(Record.komaSQLiteRecord(from: reader))
                 case SQLITE_DONE:
                     return records
                 default:
