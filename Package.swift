@@ -135,7 +135,21 @@ let package = Package(
                 .define("SQLITE_OMIT_LOAD_EXTENSION"),
                 .define("SQLITE_ENABLE_JSON1"),
                 .define("SQLITE_ENABLE_FTS5"),
-                .define("SQLITE_ENABLE_SNAPSHOT")
+                .define("SQLITE_ENABLE_SNAPSHOT"),
+                // SQLite's recommended performance options, restricted to the OMIT subset
+                // documented as amalgamation-safe. SQLITE_OMIT_AUTOINIT stays out because
+                // benchmark targets link CKomaSQLite directly and would each need an explicit
+                // sqlite3_initialize(); SQLITE_DQS=0 stays out because it changes accepted
+                // syntax for user raw SQL.
+                .define("SQLITE_DEFAULT_MEMSTATUS", to: "0"),
+                .define("SQLITE_DEFAULT_WAL_SYNCHRONOUS", to: "1"),
+                .define("SQLITE_LIKE_DOESNT_MATCH_BLOBS"),
+                .define("SQLITE_MAX_EXPR_DEPTH", to: "0"),
+                .define("SQLITE_OMIT_DECLTYPE"),
+                .define("SQLITE_OMIT_DEPRECATED"),
+                .define("SQLITE_OMIT_PROGRESS_CALLBACK"),
+                .define("SQLITE_OMIT_SHARED_CACHE"),
+                .define("SQLITE_USE_ALLOCA")
             ]
         ),
         .target(

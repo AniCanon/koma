@@ -66,6 +66,11 @@ public actor SQLiteKomaStore: KomaStore {
         self.connection = SQLiteConnection(rawValue: connection)
         try installVectorFunctions()
         try execute("PRAGMA journal_mode = WAL")
+        // NORMAL skips the per-commit WAL fsync (durability moves to checkpoints); on device
+        // flash this is the difference between microsecond and millisecond single-row commits.
+        // Apps that need FULL can opt back in with rawExecute("PRAGMA synchronous = FULL").
+        try execute("PRAGMA synchronous = NORMAL")
+        try execute("PRAGMA busy_timeout = 5000")
         try execute("PRAGMA foreign_keys = ON")
 
         if let schema {
