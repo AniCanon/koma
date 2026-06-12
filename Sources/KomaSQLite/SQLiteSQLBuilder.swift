@@ -73,13 +73,34 @@ extension SQLiteKomaStore {
         return sql
     }
 
+    /// `IS NOT` comparisons (NULL-safe) over the non-key columns, used to skip conflicting
+    /// rows whose values are already identical: unchanged rows dirty no pages, fire no
+    /// triggers, and stay out of `sqlite3_total_changes`, so a no-change refresh is a no-op
+    /// for the WAL, the disk, and live observers.
+    static func upsertChangeGuard(columns: [KomaColumnMetadata], primaryKey: String) -> String {
+        var sql = ""
+        for column in columns where column.name != primaryKey {
+            if !sql.isEmpty {
+                sql.append(" OR ")
+            }
+            Self.appendQuotedIdentifier(column.name, to: &sql)
+            sql.append(" IS NOT excluded.")
+            Self.appendQuotedIdentifier(column.name, to: &sql)
+        }
+        return sql
+    }
+
     static func upsertSQL(tableName: String, primaryKey: String, columns: [KomaColumnMetadata]) -> String {
         let columnList = Self.quotedColumnList(columns)
         let placeholders = Self.placeholders(count: columns.count)
         let updates = Self.upsertAssignments(columns: columns, primaryKey: primaryKey)
+        let changeGuard = Self.upsertChangeGuard(columns: columns, primaryKey: primaryKey)
 
         var sql = "INSERT INTO "
-        sql.reserveCapacity(tableName.utf8.count + columnList.utf8.count + placeholders.utf8.count + updates.utf8.count + 96)
+        sql.reserveCapacity(
+            tableName.utf8.count + columnList.utf8.count + placeholders.utf8.count
+                + updates.utf8.count + changeGuard.utf8.count + 112
+        )
         Self.appendQuotedIdentifier(tableName, to: &sql)
         sql.append(" (")
         sql.append(columnList)
@@ -87,14 +108,19 @@ extension SQLiteKomaStore {
         sql.append(placeholders)
         sql.append(")")
 
+        sql.append(" ON CONFLICT(")
+        Self.appendQuotedIdentifier(primaryKey, to: &sql)
+
         guard !updates.isEmpty else {
+            // Key-only table: re-upserting an existing key is a no-op, not a constraint error.
+            sql.append(") DO NOTHING")
             return sql
         }
 
-        sql.append(" ON CONFLICT(")
-        Self.appendQuotedIdentifier(primaryKey, to: &sql)
         sql.append(") DO UPDATE SET ")
         sql.append(updates)
+        sql.append(" WHERE ")
+        sql.append(changeGuard)
         return sql
     }
 

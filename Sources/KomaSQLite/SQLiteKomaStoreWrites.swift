@@ -22,6 +22,7 @@ public extension SQLiteKomaStore {
         if ownsTransaction {
             try execute("BEGIN IMMEDIATE TRANSACTION")
         }
+        let changesBefore = totalChanges
         do {
             try withStatement(sql) { statement in
                 if let fastRecordType {
@@ -58,7 +59,9 @@ public extension SQLiteKomaStore {
             if ownsTransaction {
                 try execute("COMMIT")
             }
-            recordChangedTable(Record.komaTableName)
+            if totalChanges > changesBefore {
+                recordChangedTable(Record.komaTableName)
+            }
         } catch {
             if ownsTransaction {
                 try? execute("ROLLBACK")

@@ -52,6 +52,12 @@ extension SQLiteKomaStore {
         Int(sqlite3_changes(connection.rawValue))
     }
 
+    /// Lifetime INSERT/UPDATE/DELETE count for the connection; deltas across a batch reveal
+    /// whether any row actually changed (change-guarded upserts keep identical rows out).
+    var totalChanges: Int {
+        Int(sqlite3_total_changes64(connection.rawValue))
+    }
+
     static func quote(_ identifier: String) -> String {
         var sql = ""
         sql.reserveCapacity(identifier.utf8.count + 2)

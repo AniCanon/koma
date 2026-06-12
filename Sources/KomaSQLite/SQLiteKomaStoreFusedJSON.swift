@@ -20,8 +20,8 @@ public extension SQLiteKomaStore {
         if ownsTransaction {
             try execute("BEGIN IMMEDIATE TRANSACTION")
         }
+        let changesBefore = totalChanges
         do {
-            var didWriteRows = false
             try withStatement(sql) { statement in
                 try Record.komaJSONBindRecords(
                     from: data,
@@ -36,14 +36,13 @@ public extension SQLiteKomaStore {
                             throw SQLiteKomaError.executionFailed("SQLite upsert failed.")
                         }
                         sqlite3_reset(statement)
-                        didWriteRows = true
                     }
                 )
             }
             if ownsTransaction {
                 try execute("COMMIT")
             }
-            if didWriteRows {
+            if totalChanges > changesBefore {
                 recordChangedTable(Record.komaTableName)
             }
         } catch {
