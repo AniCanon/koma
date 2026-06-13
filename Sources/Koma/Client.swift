@@ -8,6 +8,16 @@ public enum KomaJSONOptimization: Equatable, Sendable {
     case disabled
 }
 
+/// Controls conditional GET revalidation for resource refreshes.
+public enum KomaConditionalRequests: Equatable, Sendable {
+    /// Stores `ETag`/`Last-Modified` validators per request and sends `If-None-Match` /
+    /// `If-Modified-Since` on later refreshes. A `304 Not Modified` skips the download,
+    /// decode, and upsert; the local store already holds the current data.
+    case automatic
+    /// Never sends conditional headers and never stores validators.
+    case disabled
+}
+
 /// Coordinates Koma storage, transport, plugins, coding, and refresh state.
 ///
 /// Create one client at an app or feature boundary and inject it into your
@@ -35,6 +45,7 @@ public struct KomaClient: @unchecked Sendable {
     public let jsonEncoder: JSONEncoder
     public let jsonDecoder: JSONDecoder
     public let jsonOptimization: KomaJSONOptimization
+    public let conditionalRequests: KomaConditionalRequests
     let refreshScheduler: KomaRefreshScheduler
 
     /// Creates a Koma client.
@@ -47,6 +58,7 @@ public struct KomaClient: @unchecked Sendable {
     ///   - jsonEncoder: The encoder used for request bodies.
     ///   - jsonDecoder: The fallback decoder used for REST responses.
     ///   - jsonOptimization: Controls Koma's optimized JSON path for supported record-shaped responses.
+    ///   - conditionalRequests: Controls `ETag`/`Last-Modified` revalidation for refreshes.
     public init(
         baseURL: URL,
         store: any KomaStore,
@@ -54,7 +66,8 @@ public struct KomaClient: @unchecked Sendable {
         plugins: [any KomaHTTPPlugin] = [],
         jsonEncoder: JSONEncoder = JSONEncoder(),
         jsonDecoder: JSONDecoder = JSONDecoder(),
-        jsonOptimization: KomaJSONOptimization = .automatic
+        jsonOptimization: KomaJSONOptimization = .automatic,
+        conditionalRequests: KomaConditionalRequests = .automatic
     ) {
         self.baseURL = baseURL
         self.store = store
@@ -63,16 +76,21 @@ public struct KomaClient: @unchecked Sendable {
         self.jsonEncoder = jsonEncoder
         self.jsonDecoder = jsonDecoder
         self.jsonOptimization = jsonOptimization
+        self.conditionalRequests = conditionalRequests
         refreshScheduler = KomaRefreshScheduler(store: store)
     }
 
     public func execute(
         _ request: KomaRequest,
         operation: String,
-        collectResponseHeaders: Bool = true
+        collectResponseHeaders: Bool = true,
+        acceptNotModified: Bool = false
     ) async throws -> KomaResponse {
         if plugins.isEmpty {
             let response = try await send(request, collectResponseHeaders: collectResponseHeaders)
+            if acceptNotModified, response.statusCode == 304 {
+                return response
+            }
             try Self.validateSuccessfulResponse(response)
             return response
         }
@@ -89,6 +107,9 @@ public struct KomaClient: @unchecked Sendable {
                 }
 
                 let response = try await send(prepared, collectResponseHeaders: collectResponseHeaders)
+                if acceptNotModified, response.statusCode == 304 {
+                    return response
+                }
                 try Self.validateSuccessfulResponse(response)
 
                 for plugin in plugins {

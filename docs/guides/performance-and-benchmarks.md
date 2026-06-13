@@ -13,11 +13,16 @@ Koma is designed to keep app code high level while moving repetitive work into g
 - Resource refresh can use the fused JSON path to scan response bytes and bind SQLite values without first building an intermediate record array when the caller only needs the persisted result.
 - Resource fetches persist normalized records first, then reuse the same local query engine for filtering, sorting, limits, and relationships.
 - Live observations use table invalidation plus buffered signals, so repeated writes coalesce while an observer is refetching.
+- Upserts carry a change guard, so re-writing identical rows (a no-change refresh) dirties no pages, grows no WAL, and fires no observers.
+- Reads outside transactions run on a pool of read-only WAL connections, concurrently with the writer and each other; reads inside a transaction stay on the writer and see its uncommitted writes.
+- Every connection caches prepared statements, so point reads and single-row writes skip re-render and re-prepare.
+- The bundled SQLite builds with the recommended performance options and opens with `synchronous = NORMAL` under WAL.
 - Relationship `.include(...)` batch-loads related records and avoids N+1 query patterns.
-- Raw SQL, FTS5, and vector search APIs stay on the same serialized SQLite actor and reuse generated row hydration instead of forcing users through a separate database stack.
-- Exact vector search scans a lean `rowid + embedding` projection, scores `Float64` blobs directly from SQLite row buffers, and hydrates only the winners.
-- Quantized vector search uses a trigger-maintained int8 sidecar as a fast pre-filter, then reranks over-fetched candidates with full-precision cosine.
+- Raw SQL, FTS5, and vector search APIs share the same store, pool, and generated row hydration instead of forcing users through a separate database stack.
+- Exact vector search scans a lean `rowid + embedding` projection, scores `Float64` blobs directly from SQLite row buffers, and hydrates only the winners; `assumeNormalized: true` skips per-row norm work for normalized embeddings.
+- Quantized vector search uses a trigger-maintained int8 sidecar as a fast pre-filter, then reranks over-fetched candidates with full-precision cosine. Hybrid search runs its keyword and vector legs on two pooled connections concurrently.
 - The HTTP layer stays close to `URLSession`; plugins compose auth, retry, and logging without hiding the transport.
+- Resource GETs store `ETag`/`Last-Modified` validators and revalidate with conditional requests; a `304 Not Modified` skips the download, the decode, and the upsert.
 
 Raw SQLite can still win some narrow microbenchmarks because it has no framework abstraction. Koma's target is to stay close to raw SQLite while preserving a typed, testable API and explicit raw SQL escape hatches.
 
@@ -36,7 +41,7 @@ The official script records metadata with each run:
 
 The current suite covers raw SQLite, Koma SQLite, GRDB, Core Data, SwiftData when explicitly enabled from an Xcode toolchain, Koma resource refresh, Koma local resource reads, FTS5, exact vector search, quantized vector search, hybrid search, URLSession, Alamofire, Moya, Apollo, and Koma's optimized JSON record path where the platform supports them.
 
-Relation loading, eager includes, refresh due scans, large `IN` predicates, and migration-heavy workloads are the next benchmark areas to add before quoting broader ORM claims.
+Relation loading, eager includes, refresh due scans, large `IN` predicates, and migration-heavy workloads are the next benchmark areas to add before quoting broader ORM claims. Point reads, point writes, no-change upserts, and concurrent reads during writes are covered by `koma.sqlite.pointRead.10k`, `koma.sqlite.pointUpsert.10k`, `koma.sqlite.noChangeUpsert.1k`, `koma.sqlite.fusedJSONNoChangeUpsert.1k`, and `koma.sqlite.concurrentReadDuringWrite.10k.limit100`.
 
 Use benchmark results to decide where to optimize internals without changing the public API. The app-facing surface should stay clean; Koma should absorb lower-level storage details.
 

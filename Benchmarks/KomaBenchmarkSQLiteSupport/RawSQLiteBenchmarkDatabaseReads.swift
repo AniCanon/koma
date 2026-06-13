@@ -1,6 +1,8 @@
 import CKomaSQLite
 import KomaBenchmarkSupport
 
+private let rawSQLiteReadTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+
 public extension RawSQLiteBenchmarkDatabase {
     func fetchActiveProjects(limit: Int) throws -> [BenchmarkProject] {
         try fetchProjects(
@@ -55,6 +57,29 @@ public extension RawSQLiteBenchmarkDatabase {
             """,
             limit: limit
         )
+    }
+
+    func fetchProject(id: String) throws -> BenchmarkProject? {
+        let statement = try prepare(
+            """
+            SELECT id, name, slug, deletedAt, score, updatedAt, summary
+            FROM benchmark_projects
+            WHERE id = ?
+            LIMIT 1
+            """
+        )
+        defer { sqlite3_finalize(statement) }
+
+        sqlite3_bind_text(statement, 1, id, -1, rawSQLiteReadTransient)
+
+        switch sqlite3_step(statement) {
+        case SQLITE_ROW:
+            return Self.project(from: statement)
+        case SQLITE_DONE:
+            return nil
+        default:
+            throw RawSQLiteBenchmarkError.executionFailed(errorMessage)
+        }
     }
 
     private func fetchProjects(sql: String, limit: Int) throws -> [BenchmarkProject] {

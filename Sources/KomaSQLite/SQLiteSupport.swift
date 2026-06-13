@@ -18,6 +18,9 @@ extension KomaStorageKind {
 }
 
 let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+/// No-op destructor: SQLite reads the caller's bytes in place and never frees them. Only safe
+/// when the buffer provably outlives every step of the statement it is bound to.
+let SQLITE_STATIC: sqlite3_destructor_type? = nil
 
 struct SQLiteConnection: @unchecked Sendable {
     var rawValue: OpaquePointer?
@@ -37,19 +40,24 @@ struct SQLiteStatementBinder: KomaSQLiteJSONValueBinder {
 
     mutating func bind(_ value: borrowing String) throws {
         if let result = value.utf8.withContiguousStorageIfAvailable({ bytes in
-            bindText(bytes)
+            bindText(bytes, SQLITE_TRANSIENT)
         }) {
             try advance(result)
             return
         }
 
         let bytes = Array(value.utf8)
-        try advance(bytes.withUnsafeBufferPointer { bindText($0) })
+        try advance(bytes.withUnsafeBufferPointer { bindText($0, SQLITE_TRANSIENT) })
     }
 
     mutating func bind(_ value: borrowing KomaJSONText) throws {
+        // Buffer-backed text points into the JSON input buffer, which outlives the whole
+        // statement loop on the fused path — SQLite can read it at step time without the
+        // defensive copy SQLITE_TRANSIENT would make. Escape-materialized strings are only
+        // pinned inside the closure, so they keep the copying destructor.
+        let destructor = value.isBufferBacked ? SQLITE_STATIC : SQLITE_TRANSIENT
         let result = value.withUnsafeUTF8 { bytes in
-            bindText(bytes)
+            bindText(bytes, destructor)
         }
         try advance(result)
     }
@@ -91,12 +99,12 @@ struct SQLiteStatementBinder: KomaSQLiteJSONValueBinder {
         index += 1
     }
 
-    private func bindText(_ bytes: UnsafeBufferPointer<UInt8>) -> Int32 {
+    private func bindText(_ bytes: UnsafeBufferPointer<UInt8>, _ destructor: sqlite3_destructor_type?) -> Int32 {
         guard let baseAddress = bytes.baseAddress else {
             return sqlite3_bind_text(statement, index, "", 0, SQLITE_TRANSIENT)
         }
         return baseAddress.withMemoryRebound(to: CChar.self, capacity: bytes.count) { pointer in
-            sqlite3_bind_text(statement, index, pointer, Int32(bytes.count), SQLITE_TRANSIENT)
+            sqlite3_bind_text(statement, index, pointer, Int32(bytes.count), destructor)
         }
     }
 }

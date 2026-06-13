@@ -14,37 +14,54 @@ public extension SQLiteKomaStore {
         let columns = Record.komaColumns
         let sql = Self.upsertSQL(tableName: Record.komaTableName, primaryKey: Record.komaPrimaryKey, columns: columns)
 
+        // Open the fast-path existential once for the batch; the record loop then binds via
+        // direct witness calls instead of a dynamic cast per record.
+        let fastRecordType = usesSQLiteFastPath ? Record.self as? any KomaSQLiteFastPathRecord.Type : nil
+
         let ownsTransaction = !isInsideCurrentTransaction
         if ownsTransaction {
             try execute("BEGIN IMMEDIATE TRANSACTION")
         }
+        let changesBefore = totalChanges
         do {
             try withStatement(sql) { statement in
-                for record in records {
-                    if self.usesSQLiteFastPath,
-                       let fastRecord = record as? any KomaSQLiteFastPathRecord
-                    {
-                        var binder = SQLiteStatementBinder(statement: statement)
-                        try fastRecord.komaSQLiteBind(into: &binder)
-                        guard binder.boundCount == columns.count else {
-                            throw SQLiteKomaError.executionFailed("SQLite value count mismatch.")
+                if let fastRecordType {
+                    func bindRows<FastRecord: KomaSQLiteFastPathRecord>(_: FastRecord.Type) throws {
+                        guard let fastRecords = records as? [FastRecord] else {
+                            throw SQLiteKomaError.executionFailed("SQLite fast path received an unexpected record type.")
                         }
-                    } else {
+                        for record in fastRecords {
+                            var binder = SQLiteStatementBinder(statement: statement)
+                            try record.komaSQLiteBind(into: &binder)
+                            guard binder.boundCount == columns.count else {
+                                throw SQLiteKomaError.executionFailed("SQLite value count mismatch.")
+                            }
+                            guard sqlite3_step(statement) == SQLITE_DONE else {
+                                throw SQLiteKomaError.executionFailed("SQLite upsert failed.")
+                            }
+                            sqlite3_reset(statement)
+                        }
+                    }
+                    try bindRows(fastRecordType)
+                } else {
+                    for record in records {
                         let object = try self.object(from: record)
                         for (index, column) in columns.enumerated() {
                             try Self.bind(object[column.name] ?? NSNull(), to: statement, at: Int32(index + 1))
                         }
+                        guard sqlite3_step(statement) == SQLITE_DONE else {
+                            throw SQLiteKomaError.executionFailed("SQLite upsert failed.")
+                        }
+                        sqlite3_reset(statement)
                     }
-                    guard sqlite3_step(statement) == SQLITE_DONE else {
-                        throw SQLiteKomaError.executionFailed("SQLite upsert failed.")
-                    }
-                    sqlite3_reset(statement)
                 }
             }
             if ownsTransaction {
                 try execute("COMMIT")
             }
-            recordChangedTable(Record.komaTableName)
+            if totalChanges > changesBefore {
+                recordChangedTable(Record.komaTableName)
+            }
         } catch {
             if ownsTransaction {
                 try? execute("ROLLBACK")
@@ -166,7 +183,7 @@ public extension SQLiteKomaStore {
             return value
         } catch {
             try? execute("ROLLBACK")
-            ensuredTables.removeAll(keepingCapacity: true)
+            ensuredTables.removeAll()
             pendingChangedTables.removeAll(keepingCapacity: true)
             endTransactionScope()
             throw error

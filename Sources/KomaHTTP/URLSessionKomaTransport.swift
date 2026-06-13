@@ -93,7 +93,8 @@ public extension KomaClient {
         plugins: [any KomaHTTPPlugin] = [],
         session: URLSession = .shared,
         jsonEncoder: JSONEncoder = JSONEncoder(),
-        jsonDecoder: JSONDecoder = JSONDecoder()
+        jsonDecoder: JSONDecoder = JSONDecoder(),
+        conditionalRequests: KomaConditionalRequests = .automatic
     ) {
         self.init(
             baseURL: baseURL,
@@ -101,7 +102,8 @@ public extension KomaClient {
             transport: URLSessionKomaTransport(session: session),
             plugins: plugins,
             jsonEncoder: jsonEncoder,
-            jsonDecoder: jsonDecoder
+            jsonDecoder: jsonDecoder,
+            conditionalRequests: conditionalRequests
         )
     }
 }

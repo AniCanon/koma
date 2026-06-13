@@ -16,7 +16,7 @@ You can use Koma in storage-only mode as a typed SQLite ORM. The network/resourc
 
 ## What Koma Is
 
-Koma is a local-first data layer for Swift apps that need the same storage code on iOS and Android Swift. It gives you a compact typed SQLite ORM, macro-generated records and REST resources, relationship-aware queries, migrations, request refresh policies, auth plugins, retry plugins, and testable dependency injection.
+Koma is a local-first data layer for Swift apps that need the same storage code on iOS and Android Swift. It gives you a compact typed SQLite ORM, macro-generated records and REST resources, relationship-aware queries, migrations, request refresh policies with conditional `ETag` revalidation, auth plugins, retry plugins, and testable dependency injection. Reads run on pooled WAL connections concurrently with writes.
 
 Koma is not a backend, a global object graph, a whole-database sync product, or a replacement for raw SQLite in every possible workload. Instead, it gives application repositories a small ORM that is close to raw SQLite on measured paths, plus escape hatches for custom SQL when an app needs them.
 
