@@ -1,14 +1,18 @@
 import Foundation
 
 extension KomaResourceMacro {
-    static func routeFromKomaRoute(_ text: String) -> (method: String, path: String, output: String)? {
+    static func routeFromKomaRoute(_ text: String) -> (method: String, path: String, output: String, isReturning: Bool)? {
         guard let methodCall = routeMethodCall(in: text) else {
             return nil
+        }
+        if let returning = Self.metatypeArgument(labeled: ["returning"], in: methodCall.arguments) {
+            return (methodCall.method, methodCall.path, returning, true)
         }
         return (
             methodCall.method,
             methodCall.path,
-            Self.routeOutputType(in: methodCall.arguments) ?? "Void"
+            Self.routeOutputType(in: methodCall.arguments) ?? "Void",
+            false
         )
     }
 
@@ -41,7 +45,11 @@ extension KomaResourceMacro {
     }
 
     private static func routeOutputType(in text: String) -> String? {
-        for label in ["as", "output", "response"] {
+        metatypeArgument(labeled: ["as", "output", "response"], in: text)
+    }
+
+    private static func metatypeArgument(labeled labels: [String], in text: String) -> String? {
+        for label in labels {
             guard let expression = KomaMacroParsing.argumentExpressionInCall(named: label, in: text),
                   let selfRange = expression.range(of: ".self")
             else {

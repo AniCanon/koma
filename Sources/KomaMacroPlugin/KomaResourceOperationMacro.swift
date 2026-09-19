@@ -17,8 +17,24 @@ extension KomaResourceMacro {
             let defaultValue = pieces.count > 1 ? pieces[1] : nil
 
             if let colon = declaration.firstIndex(of: ":") {
-                let label = String(declaration[..<colon]).trimmingCharacters(in: .whitespacesAndNewlines)
+                let names = String(declaration[..<colon])
+                    .split(whereSeparator: { $0.isWhitespace })
+                    .map(String.init)
                 let type = String(declaration[declaration.index(after: colon)...]).trimmingCharacters(in: .whitespacesAndNewlines)
+
+                // `_ name: Type` declares an external label of `_` and a local name of `name`.
+                // Only the local name is valid inside the generated body.
+                if names.count == 2, names[0] == "_" {
+                    return ResourceParameter(
+                        label: "_",
+                        localName: names[1],
+                        type: type,
+                        defaultValue: defaultValue,
+                        isUnlabeled: true
+                    )
+                }
+
+                let label = names.first ?? ""
                 return ResourceParameter(label: label, localName: label, type: type, defaultValue: defaultValue, isUnlabeled: false)
             }
 
@@ -29,7 +45,52 @@ extension KomaResourceMacro {
     }
 
     static func clientMethod(for operation: ResourceOperation, basePath: String, recordType: String) -> String {
-        let signature = operation.parameters.map { parameter in
+        """
+        public func \(operation.name)(\(signature(for: operation))) -> KomaFetch<\(operation.output), \(recordType)> {
+            KomaFetch(
+                client: self.koma,
+                operation: KomaOperation(
+                    name: "\(operation.name)",
+                    method: .\(operation.method),
+                    path: KomaPath.join("\(basePath)", "\(operation.path)"),
+                    queryItems: \(queryItems(for: operation)),
+                    pathValues: \(pathValues(for: operation)),
+                    body: \(body(for: operation)),\(headersArgument(for: operation))
+                    cache: \(operation.cache),
+                    adapter: \(operation.adapter),
+                    isRefreshable: \(operation.isRefreshable)
+                ),
+                output: \(operation.output).self,
+                record: \(recordType).self
+            )
+        }
+        """
+    }
+
+    /// Generates the method for a `returning:` route: a command that decodes the response and
+    /// hands it back. No `cache`, `adapter`, or `isRefreshable` — nothing is stored, so there is
+    /// no local copy to name, adapt, or keep fresh.
+    static func returningClientMethod(for operation: ResourceOperation, basePath: String) -> String {
+        """
+        public func \(operation.name)(\(signature(for: operation))) -> KomaReturningCommand<\(operation.output)> {
+            KomaReturningCommand(
+                client: self.koma,
+                operation: KomaOperation(
+                    name: "\(operation.name)",
+                    method: .\(operation.method),
+                    path: KomaPath.join("\(basePath)", "\(operation.path)"),
+                    queryItems: \(queryItems(for: operation)),
+                    pathValues: \(pathValues(for: operation)),
+                    body: \(body(for: operation))\(headersArgument(for: operation, isTrailing: true))
+                ),
+                value: \(operation.output).self
+            )
+        }
+        """
+    }
+
+    private static func signature(for operation: ResourceOperation) -> String {
+        operation.parameters.map { parameter in
             if parameter.isUnlabeled {
                 if let defaultValue = parameter.defaultValue {
                     return "_ \(parameter.localName): \(parameter.type) = \(defaultValue)"
@@ -41,31 +102,26 @@ extension KomaResourceMacro {
             }
             return "\(parameter.label): \(parameter.type)"
         }.joined(separator: ", ")
+    }
 
-        let pathValues = Self.pathValues(for: operation)
-        let queryItems = Self.queryItems(for: operation)
-        let body = Self.body(for: operation)
-
-        return """
-        public func \(operation.name)(\(signature)) -> KomaFetch<\(operation.output), \(recordType)> {
-            KomaFetch(
-                client: self.koma,
-                operation: KomaOperation(
-                    name: "\(operation.name)",
-                    method: .\(operation.method),
-                    path: KomaPath.join("\(basePath)", "\(operation.path)"),
-                    queryItems: \(queryItems),
-                    pathValues: \(pathValues),
-                    body: \(body),
-                    cache: \(operation.cache),
-                    adapter: \(operation.adapter),
-                    isRefreshable: \(operation.isRefreshable)
-                ),
-                output: \(operation.output).self,
-                record: \(recordType).self
-            )
+    /// The `headers:` argument, or an empty string when the route sends no headers of its own.
+    ///
+    /// A `headers` case parameter is merged over the route's fixed `headers:`, so a call can
+    /// add the values only it knows — a multipart boundary — without restating the rest.
+    private static func headersArgument(for operation: ResourceOperation, isTrailing: Bool = false) -> String {
+        let parameter = operation.parameters.first { $0.localName == "headers" }
+        let expression: String
+        switch (operation.headers, parameter) {
+        case let (.some(fixed), .some(parameter)):
+            expression = "\(fixed).merging(\(parameter.localName)) { $1 }"
+        case let (.some(fixed), .none):
+            expression = fixed
+        case let (.none, .some(parameter)):
+            expression = parameter.localName
+        case (.none, .none):
+            return ""
         }
-        """
+        return isTrailing ? ",\n                    headers: \(expression)" : "\n                    headers: \(expression),"
     }
 
     private static func pathValues(for operation: ResourceOperation) -> String {
@@ -80,13 +136,17 @@ extension KomaResourceMacro {
     }
 
     private static func queryItems(for operation: ResourceOperation) -> String {
-        guard operation.method == "get" else {
+        // A fetch encodes query items on `GET` only; a returning route encodes them whatever
+        // its method, because a write's leftover parameters have nowhere else to go.
+        guard operation.method == "get" || operation.isReturning else {
             return "[]"
         }
 
         let pathNames = Set(Self.placeholders(in: operation.path))
         let queryParameters = operation.parameters.filter { parameter in
-            parameter.label != "body" && !pathNames.contains(parameter.localName)
+            parameter.localName != "body"
+                && parameter.localName != "headers"
+                && !pathNames.contains(parameter.localName)
         }
 
         if queryParameters.count == 1,
@@ -103,9 +163,22 @@ extension KomaResourceMacro {
     }
 
     private static func body(for operation: ResourceOperation) -> String {
-        guard let bodyParameter = operation.parameters.first(where: { $0.label == "body" }) else {
+        guard let bodyParameter = operation.parameters.first(where: { $0.localName == "body" }) else {
             return "nil"
         }
+
+        // A body already in its wire form is sent as written. Only a value that still has to
+        // be encoded goes through the JSON encoder — `Data` is `Encodable`, so encoding it
+        // would send a base64 string instead of the bytes.
+        switch bodyParameter.type.trimmingCharacters(in: .whitespaces) {
+        case "KomaRequestBody":
+            return bodyParameter.localName
+        case "Data", "Foundation.Data":
+            return "KomaRequestBody { \(bodyParameter.localName) }"
+        default:
+            break
+        }
+
         return """
         KomaRequestBody {
             try KomaQueryEncoder.bodyData(
@@ -141,9 +214,11 @@ extension KomaResourceMacro {
         let method: String
         let path: String
         let output: String
+        let isReturning: Bool
         let cache: String
         let adapter: String
         let isRefreshable: Bool
+        let headers: String?
         let parameters: [ResourceParameter]
     }
 

@@ -5,17 +5,7 @@ extension KomaFetch {
         needsOutput: Bool = true,
         needsRecords: Bool = true
     ) async throws -> (output: Output?, records: [Record]?) {
-        let body = try operation.body?.data()
-        var request = KomaRequest(
-            method: operation.method,
-            path: operation.resolvedPath,
-            queryItems: operation.queryItems,
-            headers: ["Accept": "application/json"],
-            body: body
-        )
-        if request.body != nil {
-            request.headers["Content-Type"] = "application/json"
-        }
+        var request = try operation.makeRequest()
 
         let validatorKey = conditionalRequestKey()
         var storedValidator: KomaHTTPValidatorRecord?

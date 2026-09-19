@@ -149,3 +149,5 @@ struct ProjectsRepository {
 ```
 
 Adapters should persist typed records and typed metadata only. If a backend needs full sync, define a backend contract first and build sync on top of the same storage primitives.
+
+This also decides where a write's response belongs. When a write returns records worth keeping, run it as a resource route and `fetch(...)`, with an adapter if the response is an envelope, so persistence stays in one place. When it returns something that is not stored data — a job handle, an analysis payload, a presigned upload — use a [returning command](rest-resources.md#commands) instead of writing an adapter that persists nothing.

@@ -63,17 +63,26 @@ public macro KomaIgnore() = #externalMacro(module: "KomaMacroPlugin", type: "Kom
 ///     case list(ProjectListParams = .init())
 /// }
 /// ```
+///
+/// `record:` names the record type every `as:` route in the namespace stores. A namespace
+/// made only of `returning:` routes stores nothing and may omit it.
 @attached(member, names: named(Client), named(client))
 @attached(extension, conformances: KomaResourceNamespace)
-public macro KomaResource(basePath: String, record: Any.Type) = #externalMacro(module: "KomaMacroPlugin", type: "KomaResourceMacro")
+public macro KomaResource(basePath: String, record: Any.Type? = nil) = #externalMacro(module: "KomaMacroPlugin", type: "KomaResourceMacro")
 
-/// Describes an HTTP route and its cache, refresh, and adapter behavior.
+/// Describes an HTTP route and its cache, refresh, adapter, and header behavior.
+///
+/// `headers:` carries the fixed headers of a route — the ones known at compile time, such
+/// as a non-JSON `Content-Type`. Headers that depend on a call's own values, such as a
+/// multipart boundary, belong in a `headers: [String: String]` case parameter, which is
+/// merged over these.
 @attached(peer)
 public macro KomaRoute(
     _ route: KomaRouteDescriptor,
     cache: KomaCacheDescriptor? = nil,
     refresh: KomaRouteRefresh = .disabled,
-    adapter: Any.Type? = nil
+    adapter: Any.Type? = nil,
+    headers: [String: String] = [:]
 ) = #externalMacro(module: "KomaMacroPlugin", type: "KomaNoopMacro")
 
 @available(*, deprecated, message: "Use @KomaRoute(.get(_:as:), cache:refresh:adapter:) instead.")

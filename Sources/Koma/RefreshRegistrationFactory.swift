@@ -20,7 +20,7 @@ enum KomaRefreshRegistrationFactory {
             method: operation.method.rawValue,
             path: operation.resolvedPath,
             query: query,
-            cacheNamespace: operation.cache?.namespace,
+            cacheNamespace: operation.resolvedCacheNamespace,
             policyLifetime: policy.lifetime.rawValue,
             staleAfterSeconds: policy.staleAfter.seconds,
             userScope: policy.userScope,
@@ -39,16 +39,5 @@ enum KomaRefreshRegistrationFactory {
         var components = URLComponents()
         components.queryItems = sorted
         return components.percentEncodedQuery ?? ""
-    }
-}
-
-private extension KomaCacheDescriptor {
-    var namespace: String {
-        switch kind {
-        case let .collection(name):
-            return "collection:\(name)"
-        case let .entity(name):
-            return "entity:\(name)"
-        }
     }
 }

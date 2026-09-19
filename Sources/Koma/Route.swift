@@ -19,11 +19,27 @@ public struct KomaRouteDescriptor {
     /// The decoded response type produced by the route.
     public let response: Any.Type
 
-    /// Creates route metadata for a resource operation.
+    /// Whether the response is returned to the caller instead of being stored.
+    ///
+    /// `false` for an `as:` route, which decodes into the namespace's record type and is
+    /// generated as a `KomaFetch`. `true` for a `returning:` route, which is generated as a
+    /// `KomaReturningCommand` and persists nothing.
+    public let isReturning: Bool
+
+    /// Creates route metadata for a resource operation whose response is stored.
     public init(method: KomaHTTPMethod, path: String = "", as response: Any.Type) {
         self.method = method
         self.path = path
         self.response = response
+        isReturning = false
+    }
+
+    /// Creates route metadata for a resource operation whose response is returned, not stored.
+    public init(method: KomaHTTPMethod, path: String = "", returning response: Any.Type) {
+        self.method = method
+        self.path = path
+        self.response = response
+        isReturning = true
     }
 
     /// Describes a `GET` route decoded as `response`.
@@ -49,6 +65,52 @@ public struct KomaRouteDescriptor {
     /// Describes a `DELETE` route decoded as `response`.
     public static func delete(_ path: String = "", as response: Any.Type) -> Self {
         Self(method: .delete, path: path, as: response)
+    }
+}
+
+/// Routes whose response is returned to the caller rather than stored.
+///
+/// `as:` and `returning:` are the two halves of Koma's CQRS split. An `as:` route decodes
+/// into the namespace's record type, persists it, and is generated as a `KomaFetch`. A
+/// `returning:` route is generated as a `KomaReturningCommand`, which decodes the response
+/// and hands it back without touching the store — for the writes whose response is not
+/// stored data, such as a job handle, an analysis payload, or a presigned upload.
+///
+/// ```swift
+/// @KomaResource(basePath: "projects")
+/// enum ImageResources {
+///     @KomaRoute(.post("{projectId}/images", returning: Job.self))
+///     case generate(projectId: String, body: GenerateRequest)
+/// }
+/// ```
+public extension KomaRouteDescriptor {
+    /// Describes a `GET` route whose response is returned instead of stored.
+    ///
+    /// The discriminator is the response, not the verb: a `GET` that answers with something
+    /// the store does not own — server capabilities, a presigned URL — would otherwise need
+    /// a record type invented for it.
+    static func get(_ path: String = "", returning response: Any.Type) -> Self {
+        Self(method: .get, path: path, returning: response)
+    }
+
+    /// Describes a `POST` route whose response is returned instead of stored.
+    static func post(_ path: String = "", returning response: Any.Type) -> Self {
+        Self(method: .post, path: path, returning: response)
+    }
+
+    /// Describes a `PATCH` route whose response is returned instead of stored.
+    static func patch(_ path: String = "", returning response: Any.Type) -> Self {
+        Self(method: .patch, path: path, returning: response)
+    }
+
+    /// Describes a `PUT` route whose response is returned instead of stored.
+    static func put(_ path: String = "", returning response: Any.Type) -> Self {
+        Self(method: .put, path: path, returning: response)
+    }
+
+    /// Describes a `DELETE` route whose response is returned instead of stored.
+    static func delete(_ path: String = "", returning response: Any.Type) -> Self {
+        Self(method: .delete, path: path, returning: response)
     }
 }
 

@@ -1,4 +1,5 @@
 import Foundation
+import SwiftDiagnostics
 import SwiftSyntax
 import SwiftSyntaxBuilder
 import SwiftSyntaxMacros
@@ -11,15 +12,28 @@ public struct KomaResourceMacro: MemberMacro, ExtensionMacro {
         in context: some MacroExpansionContext
     ) throws -> [DeclSyntax] {
         guard let enumDecl = declaration.as(EnumDeclSyntax.self),
-              let basePath = stringLiteral(named: "basePath", in: node.description),
-              let recordType = metatypeLiteral(named: "record", in: node.description)
+              let basePath = stringLiteral(named: "basePath", in: node.description)
         else {
             return []
         }
 
+        let recordType = metatypeLiteral(named: "record", in: node.description)
         let operations = Self.operations(from: enumDecl)
+
+        if recordType == nil, let stored = operations.first(where: { !$0.isReturning }) {
+            context.diagnose(
+                Diagnostic(
+                    node: Syntax(node),
+                    message: KomaResourceDiagnostic.missingRecord(routeName: stored.name)
+                )
+            )
+            return []
+        }
+
         let methods = operations.map { operation in
-            Self.clientMethod(for: operation, basePath: basePath, recordType: recordType)
+            operation.isReturning
+                ? Self.returningClientMethod(for: operation, basePath: basePath)
+                : Self.clientMethod(for: operation, basePath: basePath, recordType: recordType ?? "Never")
         }.joined(separator: "\n\n        ")
 
         return [
@@ -68,15 +82,19 @@ public struct KomaResourceMacro: MemberMacro, ExtensionMacro {
                 method: route.method,
                 path: route.path,
                 output: route.output,
+                isReturning: route.isReturning,
                 cache: Self.cache(from: caseDecl),
                 adapter: Self.adapter(from: caseDecl),
                 isRefreshable: Self.isRefreshable(caseDecl),
+                headers: Self.headers(from: caseDecl),
                 parameters: Self.parameters(from: element)
             )
         }
     }
 
-    private static func route(from caseDecl: EnumCaseDeclSyntax) -> (method: String, path: String, output: String)? {
+    private static func route(
+        from caseDecl: EnumCaseDeclSyntax
+    ) -> (method: String, path: String, output: String, isReturning: Bool)? {
         for attribute in caseDecl.attributes {
             guard case let .attribute(attribute) = attribute else {
                 continue
@@ -103,7 +121,8 @@ public struct KomaResourceMacro: MemberMacro, ExtensionMacro {
             return (
                 method,
                 Self.firstStringLiteral(in: attribute.description) ?? "",
-                Self.outputType(in: attribute.description) ?? "Void"
+                Self.outputType(in: attribute.description) ?? "Void",
+                false
             )
         }
         return nil
@@ -171,6 +190,19 @@ public struct KomaResourceMacro: MemberMacro, ExtensionMacro {
         return "nil"
     }
 
+    private static func headers(from caseDecl: EnumCaseDeclSyntax) -> String? {
+        for attribute in caseDecl.attributes {
+            guard case let .attribute(attribute) = attribute,
+                  attribute.attributeName.source == "KomaRoute",
+                  let headers = routeArgument(named: "headers", in: attribute.description)
+            else {
+                continue
+            }
+            return headers
+        }
+        return nil
+    }
+
     private static func isRefreshable(_ caseDecl: EnumCaseDeclSyntax) -> Bool {
         for attribute in caseDecl.attributes {
             guard case let .attribute(attribute) = attribute,
@@ -183,5 +215,31 @@ public struct KomaResourceMacro: MemberMacro, ExtensionMacro {
         }
 
         return caseDecl.hasAttribute("KomaRefreshable")
+    }
+}
+
+enum KomaResourceDiagnostic: DiagnosticMessage {
+    case missingRecord(routeName: String)
+
+    var message: String {
+        switch self {
+        case let .missingRecord(routeName):
+            return """
+            @KomaResource needs `record:` because route `\(routeName)` stores its response. \
+            Declare the record type, or give the route a `returning:` response, which is \
+            handed back to the caller instead of being stored.
+            """
+        }
+    }
+
+    var diagnosticID: MessageID {
+        switch self {
+        case .missingRecord:
+            return MessageID(domain: "Koma", id: "KomaResource.missingRecord")
+        }
+    }
+
+    var severity: DiagnosticSeverity {
+        .error
     }
 }
