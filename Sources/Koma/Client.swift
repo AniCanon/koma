@@ -98,7 +98,7 @@ public struct KomaClient: @unchecked Sendable {
         var attempt = 1
 
         while true {
-            let context = KomaRequestContext(operation: operation, attempt: attempt)
+            let context = KomaRequestContext(operation: operation, attempt: attempt, method: request.method)
 
             do {
                 var prepared = request
