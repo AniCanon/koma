@@ -1,6 +1,6 @@
 import Foundation
 
-public enum KomaHTTPMethod: String, Sendable {
+public enum KomaHTTPMethod: String, Sendable, Hashable {
     case get = "GET"
     case post = "POST"
     case patch = "PATCH"
@@ -68,9 +68,14 @@ public struct KomaRequestContext: Sendable {
     public let operation: String
     public let attempt: Int
 
-    public init(operation: String, attempt: Int) {
+    /// The method of the request being sent, so a plugin can tell a replayable read from a
+    /// write it must not send twice.
+    public let method: KomaHTTPMethod
+
+    public init(operation: String, attempt: Int, method: KomaHTTPMethod = .get) {
         self.operation = operation
         self.attempt = attempt
+        self.method = method
     }
 }
 
@@ -126,15 +131,27 @@ public struct KomaBearerAuthPlugin: KomaHTTPPlugin {
     }
 }
 
+/// Retries a failed request, by default only the ones that are safe to send twice.
+///
+/// A retry replays the whole request, so a write that reached the server before the failure
+/// would be applied again — a second charge, a second job. Only `methods` are retried, and a
+/// `4xx` never is: the server rejected the request itself, so sending it again cannot help.
+/// Pass `methods` explicitly for an endpoint that is genuinely idempotent.
 public struct KomaRetryPlugin: KomaHTTPPlugin {
     public let maxAttempts: Int
+    public let methods: Set<KomaHTTPMethod>
 
-    public init(maxAttempts: Int) {
+    public init(maxAttempts: Int, methods: Set<KomaHTTPMethod> = [.get]) {
         self.maxAttempts = max(1, maxAttempts)
+        self.methods = methods
     }
 
     public func recover(_ error: Error, context: KomaRequestContext) async throws -> KomaRecovery? {
-        context.attempt < maxAttempts ? .retry : nil
+        guard context.attempt < maxAttempts, methods.contains(context.method) else { return nil }
+        if case let KomaHTTPError.invalidResponse(statusCode, _) = error, (400 ..< 500).contains(statusCode) {
+            return nil
+        }
+        return .retry
     }
 }
 

@@ -52,6 +52,14 @@ let koma = try await KomaClient.sqlite(
 )
 ```
 
+`KomaRetryPlugin` retries `GET` only, and never a `4xx`. A retry replays the whole request, so
+retrying a write that reached the server would apply it twice — a second charge, a second job.
+Name the methods explicitly for an endpoint that is genuinely idempotent:
+
+```swift
+KomaRetryPlugin(maxAttempts: 3, methods: [.get, .put])
+```
+
 Use constructor injection at app boundaries. In tests or scoped jobs, `KomaContext.withClient(_:_:)` can provide a task-local client.
 
 For Android Swift, resolve the database path from the Android host app and pass it into the shared Swift layer:
