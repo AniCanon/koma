@@ -95,11 +95,27 @@ public enum KomaQueryEncoder {
         switch value {
         case let value as String:
             return value
+        case let number as NSNumber:
+            // JSONSerialization hands back every JSON number and every JSON boolean as an
+            // NSNumber, and an NSNumber matches `as Bool` whatever it holds. Only the boxed
+            // boolean may encode as `true` / `false`; an `Int` of 0 or 1 must stay numeric.
+            return Self.isBoolean(number) ? (number.boolValue ? "true" : "false") : String(describing: number)
         case let value as Bool:
             return value ? "true" : "false"
         default:
             return String(describing: value)
         }
+    }
+
+    private static func isBoolean(_ number: NSNumber) -> Bool {
+        #if canImport(Darwin)
+        return CFGetTypeID(number) == CFBooleanGetTypeID()
+        #else
+        // swift-corelibs-foundation reports a boxed boolean as the ObjC char types.
+        // JSON never produces an `Int8`, so no integer is misread as a boolean here.
+        let type = number.objCType.pointee
+        return type == UInt8(ascii: "c") || type == UInt8(ascii: "B")
+        #endif
     }
 
     private static func canUseKomaRecordFastPath(encoder: JSONEncoder) -> Bool {
