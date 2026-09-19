@@ -52,16 +52,7 @@ public struct KomaCommand<Record: KomaEntityRecord>: Sendable {
     public func perform() async throws -> KomaResponse? {
         try await client.store.ensureSchema(for: Record.self)
 
-        var request = try KomaRequest(
-            method: operation.method,
-            path: operation.resolvedPath,
-            queryItems: operation.queryItems,
-            headers: ["Accept": "application/json"],
-            body: operation.body?.data()
-        )
-        if request.body != nil {
-            request.headers["Content-Type"] = "application/json"
-        }
+        let request = try operation.makeRequest()
 
         var response: KomaResponse?
         do {
