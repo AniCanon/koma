@@ -23,7 +23,8 @@ import Foundation
 /// ```
 ///
 /// The response must carry a JSON body the client's `jsonDecoder` can decode as `Value`. An
-/// empty or `204` response has nothing to return — use `KomaCommand` for those. A non-2xx
+/// empty or `204` response has nothing to return — use `KomaCommand` for a write that evicts
+/// local rows, or `KomaVoidCommand` for one that touches nothing locally. A non-2xx
 /// status throws `KomaHTTPError.invalidResponse(statusCode:body:)` before any decoding is
 /// attempted; `404` is a plain failure here, with no `notFoundIsSuccess` absorption.
 ///

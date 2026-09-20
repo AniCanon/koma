@@ -1,19 +1,30 @@
 import Foundation
 
 extension KomaResourceMacro {
-    static func routeFromKomaRoute(_ text: String) -> (method: String, path: String, output: String, isReturning: Bool)? {
+    /// What a route's declaration says about its response, and so which call its generated
+    /// method builds.
+    enum RouteKind {
+        /// An `as:` route: decoded into the namespace's record type and stored.
+        case stored(String)
+
+        /// A `returning:` route: decoded and handed back to the caller.
+        case returning(String)
+
+        /// Neither label: nothing is decoded and nothing is stored.
+        case void
+    }
+
+    static func routeFromKomaRoute(_ text: String) -> (method: String, path: String, kind: RouteKind)? {
         guard let methodCall = routeMethodCall(in: text) else {
             return nil
         }
         if let returning = Self.metatypeArgument(labeled: ["returning"], in: methodCall.arguments) {
-            return (methodCall.method, methodCall.path, returning, true)
+            return (methodCall.method, methodCall.path, .returning(returning))
         }
-        return (
-            methodCall.method,
-            methodCall.path,
-            Self.routeOutputType(in: methodCall.arguments) ?? "Void",
-            false
-        )
+        guard let output = Self.routeOutputType(in: methodCall.arguments) else {
+            return (methodCall.method, methodCall.path, .void)
+        }
+        return (methodCall.method, methodCall.path, .stored(output))
     }
 
     private static func routeMethodCall(in text: String) -> (method: String, path: String, arguments: String)? {
