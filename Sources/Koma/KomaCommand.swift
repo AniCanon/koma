@@ -15,6 +15,9 @@ import Foundation
 /// refresh. Set `notFoundIsSuccess` to `false` to opt out (e.g. for a `PUT`/`POST` where a
 /// 404 is a real error).
 ///
+/// A write that evicts nothing locally has no record to be generic over: use `KomaVoidCommand`
+/// rather than naming an unrelated record with `evicting: []`.
+///
 /// ```swift
 /// try await KomaCommand<OutfitRecord>(
 ///     client: koma,

@@ -89,6 +89,30 @@ extension KomaResourceMacro {
         """
     }
 
+    /// Generates the method for a route declared with neither `as:` nor `returning:`: a command
+    /// that performs the write and decodes nothing. Like a returning route it stores nothing, so
+    /// there is no `cache`, `adapter`, or `isRefreshable`, and no response type to name. This is
+    /// the only route kind that carries `notFoundIsSuccess:`, the one absorption a write can ask
+    /// for without a record to evict.
+    static func voidClientMethod(for operation: ResourceOperation, basePath: String) -> String {
+        """
+        public func \(operation.name)(\(signature(for: operation))) -> KomaVoidCommand {
+            KomaVoidCommand(
+                client: self.koma,
+                operation: KomaOperation(
+                    name: "\(operation.name)",
+                    method: .\(operation.method),
+                    path: KomaPath.join("\(basePath)", "\(operation.path)"),
+                    queryItems: \(queryItems(for: operation)),
+                    pathValues: \(pathValues(for: operation)),
+                    body: \(body(for: operation))\(headersArgument(for: operation, isTrailing: true))
+                ),
+                notFoundIsSuccess: \(operation.notFoundIsSuccess)
+            )
+        }
+        """
+    }
+
     private static func signature(for operation: ResourceOperation) -> String {
         operation.parameters.map { parameter in
             if parameter.isUnlabeled {
@@ -136,9 +160,9 @@ extension KomaResourceMacro {
     }
 
     private static func queryItems(for operation: ResourceOperation) -> String {
-        // A fetch encodes query items on `GET` only; a returning route encodes them whatever
-        // its method, because a write's leftover parameters have nowhere else to go.
-        guard operation.method == "get" || operation.isReturning else {
+        // A fetch encodes query items on `GET` only; a command route encodes them whatever its
+        // method, because a write's leftover parameters have nowhere else to go.
+        guard operation.method == "get" || !operation.isStored else {
             return "[]"
         }
 
@@ -213,13 +237,31 @@ extension KomaResourceMacro {
         let name: String
         let method: String
         let path: String
-        let output: String
-        let isReturning: Bool
+        let kind: RouteKind
         let cache: String
         let adapter: String
         let isRefreshable: Bool
+        let notFoundIsSuccess: String
         let headers: String?
         let parameters: [ResourceParameter]
+
+        /// The decoded response type, or `"Void"` for a route that decodes nothing.
+        var output: String {
+            switch kind {
+            case let .stored(output), let .returning(output):
+                return output
+            case .void:
+                return "Void"
+            }
+        }
+
+        /// Whether the route's response is decoded into the namespace's record type and stored.
+        var isStored: Bool {
+            if case .stored = kind {
+                return true
+            }
+            return false
+        }
     }
 
     struct ResourceParameter {

@@ -76,13 +76,20 @@ public macro KomaResource(basePath: String, record: Any.Type? = nil) = #external
 /// as a non-JSON `Content-Type`. Headers that depend on a call's own values, such as a
 /// multipart boundary, belong in a `headers: [String: String]` case parameter, which is
 /// merged over these.
+///
+/// `notFoundIsSuccess:` applies to a route that decodes no response, which is generated as a
+/// `KomaVoidCommand`. It defaults to `true`, absorbing a `404` so an unregister or a delete
+/// stays idempotent. Pass `false` where a `404` is a real error — a retry or an assemble whose
+/// target has to exist. Other route kinds ignore it: a fetch and a returning command have no
+/// such absorption.
 @attached(peer)
 public macro KomaRoute(
     _ route: KomaRouteDescriptor,
     cache: KomaCacheDescriptor? = nil,
     refresh: KomaRouteRefresh = .disabled,
     adapter: Any.Type? = nil,
-    headers: [String: String] = [:]
+    headers: [String: String] = [:],
+    notFoundIsSuccess: Bool = true
 ) = #externalMacro(module: "KomaMacroPlugin", type: "KomaNoopMacro")
 
 @available(*, deprecated, message: "Use @KomaRoute(.get(_:as:), cache:refresh:adapter:) instead.")

@@ -20,7 +20,7 @@ public struct KomaResourceMacro: MemberMacro, ExtensionMacro {
         let recordType = metatypeLiteral(named: "record", in: node.description)
         let operations = Self.operations(from: enumDecl)
 
-        if recordType == nil, let stored = operations.first(where: { !$0.isReturning }) {
+        if recordType == nil, let stored = operations.first(where: \.isStored) {
             context.diagnose(
                 Diagnostic(
                     node: Syntax(node),
@@ -31,9 +31,14 @@ public struct KomaResourceMacro: MemberMacro, ExtensionMacro {
         }
 
         let methods = operations.map { operation in
-            operation.isReturning
-                ? Self.returningClientMethod(for: operation, basePath: basePath)
-                : Self.clientMethod(for: operation, basePath: basePath, recordType: recordType ?? "Never")
+            switch operation.kind {
+            case .stored:
+                return Self.clientMethod(for: operation, basePath: basePath, recordType: recordType ?? "Never")
+            case .returning:
+                return Self.returningClientMethod(for: operation, basePath: basePath)
+            case .void:
+                return Self.voidClientMethod(for: operation, basePath: basePath)
+            }
         }.joined(separator: "\n\n        ")
 
         return [
@@ -81,11 +86,11 @@ public struct KomaResourceMacro: MemberMacro, ExtensionMacro {
                 name: element.name.text,
                 method: route.method,
                 path: route.path,
-                output: route.output,
-                isReturning: route.isReturning,
+                kind: route.kind,
                 cache: Self.cache(from: caseDecl),
                 adapter: Self.adapter(from: caseDecl),
                 isRefreshable: Self.isRefreshable(caseDecl),
+                notFoundIsSuccess: Self.notFoundIsSuccess(from: caseDecl),
                 headers: Self.headers(from: caseDecl),
                 parameters: Self.parameters(from: element)
             )
@@ -94,7 +99,7 @@ public struct KomaResourceMacro: MemberMacro, ExtensionMacro {
 
     private static func route(
         from caseDecl: EnumCaseDeclSyntax
-    ) -> (method: String, path: String, output: String, isReturning: Bool)? {
+    ) -> (method: String, path: String, kind: RouteKind)? {
         for attribute in caseDecl.attributes {
             guard case let .attribute(attribute) = attribute else {
                 continue
@@ -121,8 +126,7 @@ public struct KomaResourceMacro: MemberMacro, ExtensionMacro {
             return (
                 method,
                 Self.firstStringLiteral(in: attribute.description) ?? "",
-                Self.outputType(in: attribute.description) ?? "Void",
-                false
+                .stored(Self.outputType(in: attribute.description) ?? "Void")
             )
         }
         return nil
@@ -203,6 +207,20 @@ public struct KomaResourceMacro: MemberMacro, ExtensionMacro {
         return nil
     }
 
+    /// The route's `notFoundIsSuccess:`, defaulting to `KomaVoidCommand`'s own default.
+    private static func notFoundIsSuccess(from caseDecl: EnumCaseDeclSyntax) -> String {
+        for attribute in caseDecl.attributes {
+            guard case let .attribute(attribute) = attribute,
+                  attribute.attributeName.source == "KomaRoute",
+                  let value = routeArgument(named: "notFoundIsSuccess", in: attribute.description)
+            else {
+                continue
+            }
+            return value
+        }
+        return "true"
+    }
+
     private static func isRefreshable(_ caseDecl: EnumCaseDeclSyntax) -> Bool {
         for attribute in caseDecl.attributes {
             guard case let .attribute(attribute) = attribute,
@@ -226,8 +244,8 @@ enum KomaResourceDiagnostic: DiagnosticMessage {
         case let .missingRecord(routeName):
             return """
             @KomaResource needs `record:` because route `\(routeName)` stores its response. \
-            Declare the record type, or give the route a `returning:` response, which is \
-            handed back to the caller instead of being stored.
+            Declare the record type, or stop storing the response: a `returning:` response is \
+            handed back to the caller, and a route with no response at all decodes nothing.
             """
         }
     }

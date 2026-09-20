@@ -113,6 +113,14 @@ A `body` parameter typed `Data` or `KomaRequestBody` is sent as written rather t
 
 A fetch is the read side: it refreshes an endpoint, persists typed records, and reads back from the store. Writes go through commands (CQRS: queries read, commands write). Both run the same plugin pipeline as a fetch, so auth, retry, and logging apply.
 
+There are three command shapes, and the write's own effects choose between them:
+
+| Shape | Decodes a response | Touches the store | Generic over |
+| --- | --- | --- | --- |
+| `KomaCommand<Record>` | no | evicts rows | the record it evicts |
+| `KomaReturningCommand<Value>` | yes | no | the decoded value |
+| `KomaVoidCommand` | no | no | nothing |
+
 `KomaCommand` performs a write and evicts local rows once it succeeds, without decoding a response body. A `404` is treated as success so deletes stay idempotent; pass `notFoundIsSuccess: false` to opt out.
 
 ```swift
@@ -143,13 +151,31 @@ let job: Job = try await KomaReturningCommand(
 ).perform()
 ```
 
-The response must carry a JSON body decodable as the requested type; an empty or `204` response has nothing to return, so use `KomaCommand` for those. A non-2xx status throws `KomaHTTPError.invalidResponse(statusCode:body:)` before any decoding is attempted, and `404` is a plain failure here with no absorption.
+The response must carry a JSON body decodable as the requested type; an empty or `204` response has nothing to return, so use one of the other two shapes for those. A non-2xx status throws `KomaHTTPError.invalidResponse(statusCode:body:)` before any decoding is attempted, and `404` is a plain failure here with no absorption.
 
 When the response body does contain records worth keeping, do not decode it with a returning command. Run the operation through a resource route and `fetch(...)` — with an [adapter](adapters.md) if the shape is an envelope — so the records are persisted once, by the path that owns persistence.
 
+`KomaVoidCommand` is the third shape: it performs the write and does nothing else — no decode, no eviction. Use it for the writes that answer `204 No Content` and own no local copy: a register, an unregister, a delete-account, a retry, an assemble, a discard.
+
+```swift
+try await KomaVoidCommand(
+    client: koma,
+    operation: KomaOperation(
+        name: "retryRender",
+        method: .post,
+        path: "projects/{projectId}/renders/{renderId}/retry",
+        pathValues: ["projectId": projectId, "renderId": renderId]
+    )
+).perform()
+```
+
+It names no type at all, which is the point: reaching for `KomaCommand` with `evicting: []` would force the call to name a record it never touches. `404` is absorbed as success by default, the same rule and the same `notFoundIsSuccess: false` opt-out as `KomaCommand`, because the common void write is an unregister or delete whose 404 means the intent is already satisfied. Both it and `KomaCommand` return the `KomaResponse`, or `nil` when a `404` was absorbed.
+
+Choosing between the three: does the caller need a value back? Then `KomaReturningCommand`. Otherwise, does the write invalidate rows the store holds? Then `KomaCommand`. Neither, and it is `KomaVoidCommand`.
+
 ## Returning Routes
 
-A resource route declares a returning command by spelling its response `returning:` instead of `as:`. The two labels are the read/write split in the route grammar: `as:` decodes into the namespace's record type and generates a `KomaFetch`, `returning:` generates a `KomaReturningCommand` and persists nothing.
+A resource route declares a returning command by spelling its response `returning:` instead of `as:`. The response label is the read/write split in the route grammar: `as:` decodes into the namespace's record type and generates a `KomaFetch`, `returning:` generates a `KomaReturningCommand` and persists nothing, and no label at all generates a `KomaVoidCommand`.
 
 ```swift
 @KomaResource(basePath: "projects")
@@ -198,7 +224,56 @@ A namespace of returning routes stores nothing, so `@KomaResource` may omit `rec
 enum RenderResources { ... }
 ```
 
-`record:` stays required as soon as one route in the namespace is an `as:` route; omitting it there is a compile-time error naming the route that needs it. A namespace may mix both kinds freely.
+`record:` stays required as soon as one route in the namespace is an `as:` route; omitting it there is a compile-time error naming the route that needs it. A namespace may mix all three kinds freely.
+
+## Void Routes
+
+A route descriptor with neither `as:` nor `returning:` declares a void command:
+
+```swift
+@KomaResource(basePath: "projects")
+enum RenderResources {
+    @KomaRoute(.post("{projectId}/renders/{renderId}/retry"))
+    case retry(projectId: String, renderId: String, force: Bool = false)
+}
+```
+
+```swift
+try await RenderResources.client(in: koma)
+    .retry(projectId: "p-1", renderId: "r-1", force: true)
+    .perform()
+// POST projects/p-1/renders/r-1/retry?force=true
+```
+
+The generated method is the returning one minus the response type:
+
+```swift
+public func retry(projectId: String, renderId: String, force: Bool = false) -> KomaVoidCommand {
+    KomaVoidCommand(
+        client: self.koma,
+        operation: KomaOperation(
+            name: "retry",
+            method: .post,
+            path: KomaPath.join("projects", "{projectId}/renders/{renderId}/retry"),
+            queryItems: [KomaQueryEncoder.queryItem(name: "force", value: force, encoder: self.koma.jsonEncoder)].compactMap { $0 },
+            pathValues: ["projectId": String(describing: projectId), "renderId": String(describing: renderId)],
+            body: nil
+        ),
+        notFoundIsSuccess: true
+    )
+}
+```
+
+Everything a returning route supports, a void route supports: path placeholders, query items on any method, a `body:` parameter (a raw `Data` or `KomaRequestBody` body is sent as written), a `headers:` case parameter merged over the route's fixed `headers:`, and defaults declared on the case. As with a returning route, `cache:`, `adapter:`, and `refresh:` are not generated — nothing is stored. A namespace of void routes stores nothing either, so `@KomaResource` may omit `record:`.
+
+A void route absorbs a `404` by default, like `KomaCommand`. A write that must treat a `404` as a real error — a retry or an assemble whose target has to exist — says so on the route:
+
+```swift
+@KomaRoute(.post("{projectId}/renders/{renderId}/assemble"), notFoundIsSuccess: false)
+case assemble(projectId: String, renderId: String)
+```
+
+`notFoundIsSuccess:` reaches the generated `KomaVoidCommand`. The other route kinds ignore it: a fetch and a returning command have no such absorption.
 
 ## Conditional Requests
 

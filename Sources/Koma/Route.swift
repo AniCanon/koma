@@ -16,14 +16,16 @@ public struct KomaRouteDescriptor {
     /// The path relative to the resource's base path.
     public let path: String
 
-    /// The decoded response type produced by the route.
-    public let response: Any.Type
+    /// The decoded response type produced by the route, or `nil` when the route decodes
+    /// nothing — a route declared with neither `as:` nor `returning:`.
+    public let response: Any.Type?
 
     /// Whether the response is returned to the caller instead of being stored.
     ///
     /// `false` for an `as:` route, which decodes into the namespace's record type and is
     /// generated as a `KomaFetch`. `true` for a `returning:` route, which is generated as a
-    /// `KomaReturningCommand` and persists nothing.
+    /// `KomaReturningCommand` and persists nothing. Also `false` for a route with no response
+    /// at all, which is generated as a `KomaVoidCommand` and has nothing to return.
     public let isReturning: Bool
 
     /// Creates route metadata for a resource operation whose response is stored.
@@ -40,6 +42,14 @@ public struct KomaRouteDescriptor {
         self.path = path
         self.response = response
         isReturning = true
+    }
+
+    /// Creates route metadata for a resource operation that decodes no response.
+    public init(method: KomaHTTPMethod, path: String = "") {
+        self.method = method
+        self.path = path
+        response = nil
+        isReturning = false
     }
 
     /// Describes a `GET` route decoded as `response`.
@@ -70,11 +80,12 @@ public struct KomaRouteDescriptor {
 
 /// Routes whose response is returned to the caller rather than stored.
 ///
-/// `as:` and `returning:` are the two halves of Koma's CQRS split. An `as:` route decodes
-/// into the namespace's record type, persists it, and is generated as a `KomaFetch`. A
-/// `returning:` route is generated as a `KomaReturningCommand`, which decodes the response
-/// and hands it back without touching the store — for the writes whose response is not
-/// stored data, such as a job handle, an analysis payload, or a presigned upload.
+/// `as:`, `returning:`, and no response at all are the three shapes of Koma's CQRS split. An
+/// `as:` route decodes into the namespace's record type, persists it, and is generated as a
+/// `KomaFetch`. A `returning:` route is generated as a `KomaReturningCommand`, which decodes
+/// the response and hands it back without touching the store — for the writes whose response
+/// is not stored data, such as a job handle, an analysis payload, or a presigned upload. A
+/// route with neither label is generated as a `KomaVoidCommand`, which decodes nothing.
 ///
 /// ```swift
 /// @KomaResource(basePath: "projects")
@@ -111,6 +122,47 @@ public extension KomaRouteDescriptor {
     /// Describes a `DELETE` route whose response is returned instead of stored.
     static func delete(_ path: String = "", returning response: Any.Type) -> Self {
         Self(method: .delete, path: path, returning: response)
+    }
+}
+
+/// Routes that decode no response at all.
+///
+/// A route declared with neither `as:` nor `returning:` is generated as a `KomaVoidCommand`:
+/// it performs the write through the plugin pipeline and neither decodes a body nor evicts
+/// local rows. Use it for the writes that answer `204 No Content` and own no local copy — a
+/// register, an unregister, a delete-account, a retry or discard.
+///
+/// ```swift
+/// @KomaResource(basePath: "projects")
+/// enum RenderResources {
+///     @KomaRoute(.post("{projectId}/renders/{renderId}/retry"))
+///     case retry(projectId: String, renderId: String)
+/// }
+/// ```
+public extension KomaRouteDescriptor {
+    /// Describes a `GET` route that decodes no response.
+    static func get(_ path: String = "") -> Self {
+        Self(method: .get, path: path)
+    }
+
+    /// Describes a `POST` route that decodes no response.
+    static func post(_ path: String = "") -> Self {
+        Self(method: .post, path: path)
+    }
+
+    /// Describes a `PATCH` route that decodes no response.
+    static func patch(_ path: String = "") -> Self {
+        Self(method: .patch, path: path)
+    }
+
+    /// Describes a `PUT` route that decodes no response.
+    static func put(_ path: String = "") -> Self {
+        Self(method: .put, path: path)
+    }
+
+    /// Describes a `DELETE` route that decodes no response.
+    static func delete(_ path: String = "") -> Self {
+        Self(method: .delete, path: path)
     }
 }
 
